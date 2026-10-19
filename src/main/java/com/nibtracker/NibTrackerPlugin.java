@@ -4,6 +4,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.inject.Provides;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -42,6 +46,8 @@ import net.runelite.client.game.ItemStack;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.loottracker.LootReceived;
+import net.runelite.client.ui.ClientToolbar;
+import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.Text;
 
 /**
@@ -104,6 +110,14 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	@Inject
 	private ScreenshotService screenshots;
 
+	@Inject
+	private GoalTracker goals;
+
+	@Inject
+	private ClientToolbar clientToolbar;
+
+	private NavigationButton goalsButton;
+
 	/** An event waiting to be sent, with the character and profile it belongs to. */
 	private static final class Pending
 	{
@@ -141,6 +155,9 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	private volatile long nextSendAt;
 	private volatile long backoffMs;
 	private volatile long lastSentAt;
+	/* When settings last came from the server; if nothing has been sent for a while they're asked for again. */
+	private volatile long settingsAt;
+	private volatile boolean refreshing;
 
 	@Override
 	protected void startUp()
@@ -155,6 +172,15 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		grandExchange.start(this);
 		farming.start(this);
 		collectionLog.start(this);
+		GoalsPanel panel = new GoalsPanel();
+		goals.start(this, panel);
+		goalsButton = NavigationButton.builder()
+			.tooltip("Nib Tracker goals")
+			.icon(goalsIcon())
+			.priority(8)
+			.panel(panel)
+			.build();
+		clientToolbar.addNavigation(goalsButton);
 		ticker = executor.scheduleWithFixedDelay(this::tick, 2, 1, TimeUnit.SECONDS);
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
@@ -170,6 +196,8 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			ticker.cancel(false);
 			ticker = null;
 		}
+		clientToolbar.removeNavigation(goalsButton);
+		goalsButton = null;
 		for (Object t : trackers())
 		{
 			eventBus.unregister(t);
@@ -179,12 +207,30 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			send(true);
 			resetLink();
 			screenshots.reset();
+			goals.reset();
 		});
 	}
 
 	private Object[] trackers()
 	{
-		return new Object[]{progress, slayer, containers, grandExchange, collectionLog};
+		return new Object[]{progress, slayer, containers, grandExchange, collectionLog, goals};
+	}
+
+	/** The Goals panel's toolbar icon: a small target, drawn here so there's no image file to ship. */
+	private static BufferedImage goalsIcon()
+	{
+		BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g = img.createGraphics();
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		Color gold = new Color(0xE0, 0xA2, 0x30);
+		g.setColor(gold);
+		g.fillOval(1, 1, 14, 14);
+		g.setColor(new Color(0x3A, 0x2A, 0x14));
+		g.fillOval(4, 4, 8, 8);
+		g.setColor(gold);
+		g.fillOval(6, 6, 4, 4);
+		g.dispose();
+		return img;
 	}
 
 	@Provides
@@ -219,6 +265,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		{
 			prime();
 		}
+		goals.tick();
 		if (who == null)
 		{
 			return;
@@ -246,6 +293,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			linked = false;
 			helloSent = false;
 			nextHelloAt = 0;
+			goals.refresh();
 		}
 	}
 
@@ -259,7 +307,12 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		String msg = Text.removeTags(e.getMessage());
 		ChatParser.Parsed p = ChatParser.parse(msg);
-		if (p == null || !allowed(sourceOf(p.type), localToggle(p.type)))
+		if (p == null)
+		{
+			return;
+		}
+		goals.onParsed(p.type, p.data);
+		if (!allowed(sourceOf(p.type), localToggle(p.type)))
 		{
 			return;
 		}
@@ -427,6 +480,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		slayer.login();
 		grandExchange.login();
 		farming.login();
+		goals.login();
 	}
 
 	/** Client thread. Sends what's left of the XP bucket and the session length, then forgets who was playing. */
@@ -455,6 +509,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		grandExchange.reset();
 		farming.reset();
 		collectionLog.reset();
+		goals.reset();
 		levels.clear();
 		xp.clear();
 		primeIn = -1;
@@ -502,7 +557,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			}
 			if (r.has("settings") && r.get("settings").isJsonObject())
 			{
-				updateSettings(r.getAsJsonObject("settings"));
+				updateSettings(r.getAsJsonObject("settings"), r.get("plannerAccount"));
 			}
 			linked = true;
 			JsonElement msg = settings.get("message");
@@ -648,14 +703,35 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	}
 
 	/** Any thread. New settings from the server; the watch list is re-read on the client thread if it changed. */
-	private void updateSettings(JsonObject s)
+	private void updateSettings(JsonObject s, JsonElement plannerAccount)
 	{
 		JsonElement oldWatch = settings.get("watch");
 		settings = s;
+		settingsAt = System.currentTimeMillis();
 		if (oldWatch == null || !oldWatch.equals(s.get("watch")))
 		{
 			clientThread.invoke(progress::settingsChanged);
 		}
+		goals.settingsChanged(s, plannerAccount != null && plannerAccount.isJsonPrimitive() ? plannerAccount.getAsString() : null);
+	}
+
+	/** Scheduler thread. Asks for settings again (goals included) when nothing has been sent for a couple of minutes. */
+	private void refreshSettings()
+	{
+		JsonObject w = who;
+		if (w == null || refreshing)
+		{
+			return;
+		}
+		refreshing = true;
+		settingsAt = System.currentTimeMillis();
+		api.hello(config.pluginKey().trim(), w, r -> {
+			refreshing = false;
+			if (r != null && r.has("ok") && r.get("ok").getAsBoolean() && r.has("settings") && r.get("settings").isJsonObject() && w == who)
+			{
+				updateSettings(r.getAsJsonObject("settings"), r.get("plannerAccount"));
+			}
+		});
 	}
 
 	/** Scheduler thread, once a second. */
@@ -664,6 +740,10 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		if (!helloSent && who != null && config.syncEnabled() && System.currentTimeMillis() >= nextHelloAt)
 		{
 			hello();
+		}
+		if (linked && System.currentTimeMillis() - settingsAt >= 120_000L)
+		{
+			refreshSettings();
 		}
 		long gap = setting("flushSeconds", 10) * 1000L;
 		if (queue.size() >= BATCH || System.currentTimeMillis() - lastSentAt >= gap)
@@ -702,7 +782,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 				screenshots.eventsDelivered(ids);
 				if (r.has("settings") && r.get("settings").isJsonObject())
 				{
-					updateSettings(r.getAsJsonObject("settings"));
+					updateSettings(r.getAsJsonObject("settings"), r.get("plannerAccount"));
 				}
 				return;
 			}

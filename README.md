@@ -14,6 +14,19 @@ points, slayer, farming, pet luck and bingo tiles update without typing anything
 League and Deadman profiles are kept apart from your main: the first time you log in to one, Nib Tracker asks which
 planner character it should sync into (or makes a new one).
 
+## Goals in game
+
+Click the **Nib Tracker goals** button (a small gold target) on RuneLite's sidebar to see the goals you set in Nib Tracker
+for the character you're logged in on, each with a progress bar. Skill, XP, base level, kill count, collection log,
+quest and item goals update as you play; other goals show the progress Nib Tracker last worked out.
+
+When a goal completes, the game's pop-up (the one new collection log slots use) says so, and a chat line says how many
+points it earns. Turn either off under **Goals** in the plugin settings. New goals show up a few seconds after Nib Tracker
+saves them, or within a couple of minutes if you're idle.
+
+The goals come from Nib Tracker as plain data (goal type and parameters). The plugin works out progress with its own
+code for the goal types it knows; nothing it receives is run.
+
 ## What is sent
 
 Only your own character's data, and only while **Sync to Nib Tracker** is on. Each group can be turned off under
@@ -45,7 +58,7 @@ This plugin submits your IP address to a 3rd-party server not controlled or veri
 Needs Java 11 or newer.
 
 ```
-./gradlew test    # unit tests (chat parsing)
+./gradlew test    # unit tests (chat parsing, goal progress)
 ./gradlew run     # starts RuneLite with the plugin loaded, in developer mode
 ```
 

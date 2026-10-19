@@ -108,6 +108,25 @@ public interface NibTrackerConfig extends Config
 		return true;
 	}
 
+	@ConfigSection(
+		name = "Goals",
+		description = "Your Nib Tracker goals, in the Goals side panel",
+		position = 30
+	)
+	String goals = "goals";
+
+	@ConfigItem(keyName = "goalPopups", name = "Completion pop-up", description = "Show the game's pop-up (like a new collection log slot) when one of your goals completes", section = goals, position = 31)
+	default boolean goalPopups()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "goalChat", name = "Completion chat message", description = "Say in chat when one of your goals completes, with the points it earns", section = goals, position = 32)
+	default boolean goalChat()
+	{
+		return true;
+	}
+
 	@ConfigItem(keyName = "sendScreenshots", name = "Bingo screenshots", description = "Capture the game when you get an item on one of your live bingo drop tiles, and attach it as proof", section = sources, position = 22)
 	default boolean sendScreenshots()
 	{
