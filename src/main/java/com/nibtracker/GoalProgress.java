@@ -106,7 +106,7 @@ final class GoalProgress
 	}
 
 	/** The panel section a goal type goes in, in display order. */
-	static final String[] CATEGORIES = {"Skills", "Quests", "Bosses", "Collection log", "Items", "Diaries", "Combat tasks", "Other"};
+	static final String[] CATEGORIES = {"Skills", "Quests", "Bosses", "Collection log", "Items", "Achievement diaries", "Combat achievements", "Other"};
 
 	static String category(String type)
 	{
@@ -126,9 +126,9 @@ final class GoalProgress
 				return "Items";
 			case "diary_task":
 			case "diary_tier":
-				return "Diaries";
+				return "Achievement diaries";
 			case "combat_achievement":
-				return "Combat tasks";
+				return "Combat achievements";
 			default:
 				return "Other";
 		}
@@ -261,9 +261,9 @@ final class GoalProgress
 					case "FINISHED":
 						return new Result(1, "Completed", "", true);
 					case "IN_PROGRESS":
-						return new Result(0.5, "In progress", "Quick guide in Nib Tracker", false);
+						return new Result(0.5, "In progress", "Click for the wiki guide", false);
 					default:
-						return new Result(0, "Not started", "Quick guide in Nib Tracker", false);
+						return new Result(0, "Not started", "Click for the wiki guide", false);
 				}
 			}
 			case "item_owned":

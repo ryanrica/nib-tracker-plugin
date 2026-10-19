@@ -166,7 +166,7 @@ public class GoalProgressTest
 		assertEquals("Skills", GoalProgress.category("base_level"));
 		assertEquals("Quests", GoalProgress.category("quest"));
 		assertEquals("Bosses", GoalProgress.category("kc"));
-		assertEquals("Diaries", GoalProgress.category("diary_tier"));
+		assertEquals("Achievement diaries", GoalProgress.category("diary_tier"));
 		assertEquals("Other", GoalProgress.category("something_new"));
 		assertEquals("13.0M", GoalProgress.compact(13_034_431));
 		assertEquals("250K", GoalProgress.compact(250_000));
@@ -174,9 +174,14 @@ public class GoalProgressTest
 	}
 
 	@Test
-	public void goalLinksGoToTheWebApp()
+	public void goalLinks()
 	{
-		assertEquals("https://buntracker.pages.dev/#goal=gabc123&c=Kimchi%20Bun", GoalTracker.link("gabc123", "Kimchi Bun"));
-		assertEquals("https://buntracker.pages.dev/#goal=a%26b", GoalTracker.link("a&b", null));
+		assertEquals("https://buntracker.pages.dev/#goal=gabc123&c=Kimchi%20Bun",
+			GoalTracker.link(goal("{\"id\":\"gabc123\",\"type\":\"kc\",\"params\":{\"boss\":\"vorkath\",\"count\":100}}"), "Kimchi Bun"));
+		assertEquals("https://buntracker.pages.dev/#goal=a%26b", GoalTracker.link(goal("{\"id\":\"a&b\",\"type\":\"custom\"}"), null));
+		assertEquals("https://oldschool.runescape.wiki/w/Dragon_Slayer_I%2FQuick_guide",
+			GoalTracker.link(goal("{\"id\":\"q\",\"type\":\"quest\",\"params\":{\"quest\":\"Dragon Slayer I\"}}"), "Kimchi Bun"));
+		assertEquals("https://oldschool.runescape.wiki/w/Kourend_%26_Kebos_Diary",
+			GoalTracker.link(goal("{\"id\":\"d\",\"type\":\"diary_tier\",\"params\":{\"region\":\"Kourend & Kebos\",\"tier\":\"Hard\"}}"), null));
 	}
 }

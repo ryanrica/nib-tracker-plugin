@@ -262,7 +262,7 @@ class GoalTracker
 				break;
 		}
 		return new GoalsPanel.Row(category, g.title, r.detail, r.hint, r.progress, r.done, g.points, skill,
-			item == null || item.isEmpty() ? null : item, GoalsPanel.fallbackItem(category), link(g.id, planner));
+			item == null || item.isEmpty() ? null : item, GoalsPanel.fallbackItem(category), link(g, planner));
 	}
 
 	private static Skill skill(String name)
@@ -278,20 +278,42 @@ class GoalTracker
 		return null;
 	}
 
+	static final String WIKI = "https://oldschool.runescape.wiki/w/";
+
 	/**
-	 * The goal in the Nib Tracker web app: its Roadmap, focused on the goal (or the tab already open there). The address
-	 * is fixed here; only the goal's id and character name come from the server, and both are encoded.
+	 * Where clicking a goal goes. Quests open their wiki quick guide and achievement diaries their wiki page; everything
+	 * else opens the goal in the Nib Tracker web app, which picks the page (a skill's setup, a boss plan, Slayer, Farm,
+	 * or the wiki for an item no boss drops). The addresses are fixed here; only names and ids come from the server, and
+	 * they're encoded.
 	 */
-	static String link(String goalId, String planner)
+	static String link(GoalProgress.Goal g, String planner)
+	{
+		switch (g.type)
+		{
+			case "quest":
+				return g.str("quest").isEmpty() ? null : wiki(g.str("quest") + "/Quick guide");
+			case "diary_task":
+			case "diary_tier":
+				return g.str("region").isEmpty() ? null : wiki(g.str("region") + " Diary");
+			default:
+				return NibTrackerApi.SITE + "/#goal=" + encode(g.id) + (planner == null ? "" : "&c=" + encode(planner));
+		}
+	}
+
+	static String wiki(String page)
+	{
+		return WIKI + encode(page.trim().replace(' ', '_'));
+	}
+
+	private static String encode(String s)
 	{
 		try
 		{
-			return NibTrackerApi.SITE + "/#goal=" + URLEncoder.encode(goalId, "UTF-8")
-				+ (planner == null ? "" : "&c=" + URLEncoder.encode(planner, "UTF-8").replace("+", "%20"));
+			return URLEncoder.encode(s, "UTF-8").replace("+", "%20");
 		}
 		catch (UnsupportedEncodingException e)
 		{
-			return NibTrackerApi.SITE;
+			return "";
 		}
 	}
 

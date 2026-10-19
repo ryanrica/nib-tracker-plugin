@@ -254,7 +254,7 @@ class GoalsPanel extends PluginPanel
 		}
 		p.add(body, BorderLayout.CENTER);
 
-		p.setToolTipText("<html>" + escape(r.title) + (r.link != null ? "<br>Click to open it in Nib Tracker" : "") + "</html>");
+		p.setToolTipText("<html>" + escape(r.title) + (r.link == null ? "" : r.link.startsWith(GoalTracker.WIKI) ? "<br>Click for the OSRS Wiki" : "<br>Click to open it in Nib Tracker") + "</html>");
 		if (r.link != null)
 		{
 			p.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -398,7 +398,7 @@ class GoalsPanel extends PluginPanel
 				return ItemID.COLLECTION_LOG;
 			case "Items":
 				return ItemID.COINS;
-			case "Diaries":
+			case "Achievement diaries":
 				return ItemID.SKILLCAPE_AD_TRIMMED;
 			case "Skills":
 				return ItemID.SKILLCAPE_MAX;

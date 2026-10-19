@@ -16,11 +16,21 @@ planner character it should sync into (or makes a new one).
 
 ## Goals in game
 
-Click the **Nib Tracker goals** button (a small gold target) on RuneLite's sidebar to see the goals you set in Nib Tracker
-for the character you're logged in on, grouped into skills, quests, bosses, collection log, items, diaries and combat
-tasks (click a heading to fold it away). Each goal shows how far along it is, with a bar that goes from red to green, and
-what's left ("88,113 XP to go", "288 more kills"). Click a goal to open it on Nib Tracker's Roadmap; if the site is already open in your browser, that tab
-switches to the goal instead of a new one staying open.
+Click the **Nib Tracker goals** button (the Nib Tracker logo) on RuneLite's sidebar to see the goals you set in Nib
+Tracker for the character you're logged in on, grouped into skills, quests, bosses, collection log, items, achievement
+diaries and combat achievements (click a heading to fold it away). Each goal shows how far along it is, with a bar that
+goes from red to green, and what's left ("88,113 XP to go", "288 more kills").
+
+Click a goal to see more:
+
+- **Skill and XP goals** open that skill's setup page in Nib Tracker. Slayer opens the gear plan for your current task's
+  monster (or the Slayer page if there's no task), and Farming opens the Farm page.
+- **Kill counts, items and collection log slots** open the boss plan for the boss that drops them; an item no boss
+  drops opens its OSRS Wiki page.
+- **Combat achievements** open the boss plan, which lists your combat achievement goals for that boss.
+- **Quests** open the wiki quick guide, and **achievement diaries** the wiki diary page.
+
+If Nib Tracker is already open in your browser, that tab switches to the page instead of a new one staying open.
 Skill, XP, base level, kill count, collection log, quest and item goals update as you play; other goals show the
 progress Nib Tracker last worked out.
 
