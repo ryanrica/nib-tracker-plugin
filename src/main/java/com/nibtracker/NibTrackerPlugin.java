@@ -4,9 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.inject.Provides;
-import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -49,6 +46,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.loottracker.LootReceived;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.Text;
 
 /**
@@ -220,21 +218,10 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		return new Object[]{progress, slayer, containers, grandExchange, collectionLog, goals};
 	}
 
-	/** The Goals panel's toolbar icon: a small target, drawn here so there's no image file to ship. */
+	/** The Goals panel's toolbar icon: the Nib Tracker logo (64 px in the jar, shown at 18 px). */
 	private static BufferedImage goalsIcon()
 	{
-		BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D g = img.createGraphics();
-		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-		Color gold = new Color(0xE0, 0xA2, 0x30);
-		g.setColor(gold);
-		g.fillOval(1, 1, 14, 14);
-		g.setColor(new Color(0x3A, 0x2A, 0x14));
-		g.fillOval(4, 4, 8, 8);
-		g.setColor(gold);
-		g.fillOval(6, 6, 4, 4);
-		g.dispose();
-		return img;
+		return ImageUtil.resizeImage(ImageUtil.loadImageResource(NibTrackerPlugin.class, "goals_icon.png"), 18, 18, true);
 	}
 
 	@Provides
