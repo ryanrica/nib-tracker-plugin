@@ -1,4 +1,4 @@
-package com.buntracker;
+package com.nibtracker;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -23,7 +23,7 @@ import okhttp3.ResponseBody;
  */
 @Slf4j
 @Singleton
-class BunTrackerApi
+class NibTrackerApi
 {
 	static final String VERSION = "0.2.0";
 
@@ -31,7 +31,7 @@ class BunTrackerApi
 	   the server checks the plugin key on every call. */
 	private static final String BASE = "https://adndcxzfizabkuiwuzwq.supabase.co/rest/v1/rpc/";
 	private static final String PUBLISHABLE_KEY = "sb_publishable_mrNOgXJ1KVgcKHjr0ucfWQ_IpI0YQqT";
-	/* Bun Tracker's own site stores screenshots, because only it holds the key that may write to storage. */
+	/* Nib Tracker's own site stores screenshots, because only it holds the key that may write to storage. */
 	private static final String SCREENSHOT_URL = "https://buntracker.pages.dev/api/plugin/screenshot";
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 	private static final MediaType JPEG = MediaType.parse("image/jpeg");
@@ -76,7 +76,7 @@ class BunTrackerApi
 			@Override
 			public void onFailure(Call call, IOException e)
 			{
-				log.debug("Bun Tracker screenshot upload failed", e);
+				log.debug("Nib Tracker screenshot upload failed", e);
 			}
 
 			@Override
@@ -101,7 +101,7 @@ class BunTrackerApi
 			@Override
 			public void onFailure(Call call, IOException e)
 			{
-				log.debug("Bun Tracker {} failed", fn, e);
+				log.debug("Nib Tracker {} failed", fn, e);
 				done.accept(null);
 			}
 
@@ -112,7 +112,7 @@ class BunTrackerApi
 				{
 					if (!res.isSuccessful() || rb == null)
 					{
-						log.debug("Bun Tracker {} returned HTTP {}", fn, res.code());
+						log.debug("Nib Tracker {} returned HTTP {}", fn, res.code());
 						done.accept(null);
 						return;
 					}
@@ -120,7 +120,7 @@ class BunTrackerApi
 				}
 				catch (Exception e)
 				{
-					log.debug("Bun Tracker {} sent an unreadable reply", fn, e);
+					log.debug("Nib Tracker {} sent an unreadable reply", fn, e);
 					done.accept(null);
 				}
 			}

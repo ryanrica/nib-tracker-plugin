@@ -1,4 +1,4 @@
-package com.buntracker;
+package com.nibtracker;
 
 import com.google.gson.JsonObject;
 import java.util.List;
@@ -31,7 +31,7 @@ class SlayerTracker
 	private Client client;
 
 	@Inject
-	private BunTrackerConfig config;
+	private NibTrackerConfig config;
 
 	private EventSink sink;
 	private boolean dirty;

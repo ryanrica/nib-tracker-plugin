@@ -1,4 +1,4 @@
-package com.buntracker;
+package com.nibtracker;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -48,7 +48,7 @@ class ContainerTracker
 	private ItemManager itemManager;
 
 	@Inject
-	private BunTrackerConfig config;
+	private NibTrackerConfig config;
 
 	private EventSink sink;
 	private final Map<Integer, JsonArray> pending = new HashMap<>();

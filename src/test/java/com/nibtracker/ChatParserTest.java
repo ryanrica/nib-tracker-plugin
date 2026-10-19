@@ -1,4 +1,4 @@
-package com.buntracker;
+package com.nibtracker;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -94,8 +94,8 @@ public class ChatParserTest
 	@Test
 	public void accountIdIsStableAndOneWay()
 	{
-		String a = BunTrackerPlugin.accountId(123456789L);
-		assertEquals(a, BunTrackerPlugin.accountId(123456789L));
+		String a = NibTrackerPlugin.accountId(123456789L);
+		assertEquals(a, NibTrackerPlugin.accountId(123456789L));
 		assertEquals(32, a.length());
 		assertFalse(a.contains("123456789"));
 	}

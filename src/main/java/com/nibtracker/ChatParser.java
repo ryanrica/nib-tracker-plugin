@@ -1,11 +1,11 @@
-package com.buntracker;
+package com.nibtracker;
 
 import com.google.gson.JsonObject;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Turns game chat lines (tags already removed) into Bun Tracker events.
+ * Turns game chat lines (tags already removed) into Nib Tracker events.
  * Returns the event's type and data, or null if the line means nothing to us.
  * Kept free of RuneLite types so it can be unit tested.
  */

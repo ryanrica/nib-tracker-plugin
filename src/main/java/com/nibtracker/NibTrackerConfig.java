@@ -1,20 +1,20 @@
-package com.buntracker;
+package com.nibtracker;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
 
-@ConfigGroup(BunTrackerConfig.GROUP)
-public interface BunTrackerConfig extends Config
+@ConfigGroup(NibTrackerConfig.GROUP)
+public interface NibTrackerConfig extends Config
 {
-	String GROUP = "buntracker";
+	String GROUP = "nibtracker";
 	String WARNING = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers";
 
 	@ConfigItem(
 		keyName = "syncEnabled",
-		name = "Sync to Bun Tracker",
-		description = "Send your own loot, kill counts, collection log slots and levels to your Bun Tracker account",
+		name = "Sync to Nib Tracker",
+		description = "Send your own loot, kill counts, collection log slots and levels to your Nib Tracker account",
 		warning = WARNING,
 		position = 0
 	)
@@ -26,7 +26,7 @@ public interface BunTrackerConfig extends Config
 	@ConfigItem(
 		keyName = "pluginKey",
 		name = "Plugin key",
-		description = "Make one in Bun Tracker: Account > RuneLite plugin > Create plugin key. It starts with btk_",
+		description = "Make one in Nib Tracker: Account > RuneLite plugin > Create plugin key. It starts with btk_",
 		secret = true,
 		position = 1
 	)

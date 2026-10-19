@@ -1,4 +1,4 @@
-package com.buntracker;
+package com.nibtracker;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -45,16 +45,16 @@ import net.runelite.client.plugins.loottracker.LootReceived;
 import net.runelite.client.util.Text;
 
 /**
- * Reports the player's own game events to Bun Tracker. The plugin only reports facts (a drop, a kill count, XP gained);
- * the web app decides what they mean. Contract: docs/plugin-spec.md in the Bun Tracker repo.
+ * Reports the player's own game events to Nib Tracker. The plugin only reports facts (a drop, a kill count, XP gained);
+ * the web app decides what they mean. Contract: docs/plugin-spec.md in the Nib Tracker repo.
  */
 @Slf4j
 @PluginDescriptor(
-	name = "Bun Tracker",
-	description = "Syncs your loot, kill counts, collection log, XP and levels to your Bun Tracker planner",
+	name = "Nib Tracker",
+	description = "Syncs your loot, kill counts, collection log, XP and levels to your Nib Tracker planner",
 	tags = {"loot", "collection", "log", "xp", "goals", "planner", "sync", "leagues"}
 )
-public class BunTrackerPlugin extends Plugin implements EventSink
+public class NibTrackerPlugin extends Plugin implements EventSink
 {
 	private static final int MAX_QUEUE = 2000;
 	private static final int BATCH = 50;
@@ -69,10 +69,10 @@ public class BunTrackerPlugin extends Plugin implements EventSink
 	private ClientThread clientThread;
 
 	@Inject
-	private BunTrackerConfig config;
+	private NibTrackerConfig config;
 
 	@Inject
-	private BunTrackerApi api;
+	private NibTrackerApi api;
 
 	@Inject
 	private ItemManager itemManager;
@@ -188,9 +188,9 @@ public class BunTrackerPlugin extends Plugin implements EventSink
 	}
 
 	@Provides
-	BunTrackerConfig provideConfig(ConfigManager configManager)
+	NibTrackerConfig provideConfig(ConfigManager configManager)
 	{
-		return configManager.getConfig(BunTrackerConfig.class);
+		return configManager.getConfig(NibTrackerConfig.class);
 	}
 
 	// ------------------------------------------------------------ game events
@@ -241,7 +241,7 @@ public class BunTrackerPlugin extends Plugin implements EventSink
 	@Subscribe
 	public void onConfigChanged(ConfigChanged e)
 	{
-		if (BunTrackerConfig.GROUP.equals(e.getGroup()) && ("syncEnabled".equals(e.getKey()) || "pluginKey".equals(e.getKey())))
+		if (NibTrackerConfig.GROUP.equals(e.getGroup()) && ("syncEnabled".equals(e.getKey()) || "pluginKey".equals(e.getKey())))
 		{
 			linked = false;
 			helloSent = false;
@@ -513,8 +513,8 @@ public class BunTrackerPlugin extends Plugin implements EventSink
 			JsonElement planner = r.get("plannerAccount");
 			String name = w.get("rsn").getAsString() + profileLabel(w.get("profile").getAsString());
 			chat(planner != null && planner.isJsonPrimitive()
-				? "Bun Tracker is syncing " + name + " to " + planner.getAsString() + "."
-				: "Bun Tracker: choose which planner character " + name + " syncs to on the Account page. Nothing is lost meanwhile.");
+				? "Nib Tracker is syncing " + name + " to " + planner.getAsString() + "."
+				: "Nib Tracker: choose which planner character " + name + " syncs to on the Account page. Nothing is lost meanwhile.");
 		});
 	}
 
@@ -533,9 +533,9 @@ public class BunTrackerPlugin extends Plugin implements EventSink
 		String err = r.has("error") ? r.get("error").getAsString() : "";
 		if ("bad_key".equals(err))
 		{
-			return "Bun Tracker doesn't recognise your plugin key. Make a new one on the Account page.";
+			return "Nib Tracker doesn't recognise your plugin key. Make a new one on the Account page.";
 		}
-		return "Bun Tracker couldn't link this character (" + err + ").";
+		return "Nib Tracker couldn't link this character (" + err + ").";
 	}
 
 	private static String profileLabel(String profile)
@@ -548,7 +548,10 @@ public class BunTrackerPlugin extends Plugin implements EventSink
 		return " (" + Character.toUpperCase(p.charAt(0)) + p.substring(1) + ")";
 	}
 
-	/** A one-way hash of RuneLite's account hash: stable for the account across name changes, but not the raw id. */
+	/**
+	 * A one-way hash of RuneLite's account hash: stable for the account across name changes, but not the raw id.
+	 * The "bun-tracker:" salt is from before the rename and must never change, or every character gets a new id.
+	 */
 	static String accountId(long accountHash)
 	{
 		try

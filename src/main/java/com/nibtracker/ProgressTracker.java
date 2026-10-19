@@ -1,4 +1,4 @@
-package com.buntracker;
+package com.nibtracker;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -66,7 +66,7 @@ class ProgressTracker
 	private Client client;
 
 	@Inject
-	private BunTrackerConfig config;
+	private NibTrackerConfig config;
 
 	private EventSink sink;
 	private final Set<Integer> diaryVarbits = new HashSet<>();

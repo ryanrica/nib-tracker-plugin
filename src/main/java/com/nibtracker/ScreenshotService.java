@@ -1,4 +1,4 @@
-package com.buntracker;
+package com.nibtracker;
 
 import java.awt.Graphics2D;
 import java.awt.Image;
@@ -37,7 +37,7 @@ class ScreenshotService
 	private ScheduledExecutorService executor;
 
 	@Inject
-	private BunTrackerApi api;
+	private NibTrackerApi api;
 
 	private final Map<String, byte[]> ready = new ConcurrentHashMap<>();
 	private final Set<String> capturing = ConcurrentHashMap.newKeySet();
@@ -118,7 +118,7 @@ class ScreenshotService
 		}
 		catch (Exception e)
 		{
-			log.debug("Bun Tracker couldn't encode a screenshot", e);
+			log.debug("Nib Tracker couldn't encode a screenshot", e);
 			return null;
 		}
 	}

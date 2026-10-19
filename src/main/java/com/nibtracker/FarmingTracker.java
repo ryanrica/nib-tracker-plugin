@@ -1,4 +1,4 @@
-package com.buntracker;
+package com.nibtracker;
 
 import com.google.gson.JsonObject;
 import java.util.List;
@@ -22,7 +22,7 @@ class FarmingTracker
 	private ConfigManager configManager;
 
 	@Inject
-	private BunTrackerConfig config;
+	private NibTrackerConfig config;
 
 	private EventSink sink;
 	private JsonObject lastSent;

@@ -1,4 +1,4 @@
-package com.buntracker;
+package com.nibtracker;
 
 import com.google.gson.JsonObject;
 import java.util.HashMap;
@@ -23,7 +23,7 @@ class GrandExchangeTracker
 	private ItemManager itemManager;
 
 	@Inject
-	private BunTrackerConfig config;
+	private NibTrackerConfig config;
 
 	private EventSink sink;
 	private final Map<Integer, String> lastBySlot = new HashMap<>();
