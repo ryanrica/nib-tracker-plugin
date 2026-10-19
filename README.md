@@ -1,6 +1,6 @@
 # Bun Tracker
 
-[![Build](https://github.com/OWNER/bun-tracker-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/OWNER/bun-tracker-plugin/actions/workflows/build.yml)
+[![Build](https://github.com/ryanrica/bun-tracker-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/ryanrica/bun-tracker-plugin/actions/workflows/build.yml)
 
 Syncs your own Old School RuneScape progress to your [Bun Tracker](https://buntracker.pages.dev) planner, so goals,
 points, slayer, farming, pet luck and bingo tiles update without typing anything in.
