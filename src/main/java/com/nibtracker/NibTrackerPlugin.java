@@ -42,6 +42,7 @@ import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -82,6 +83,9 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 
 	@Inject
 	private ItemManager itemManager;
+
+	@Inject
+	private SkillIconManager skillIconManager;
 
 	@Inject
 	private ScheduledExecutorService executor;
@@ -172,7 +176,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		grandExchange.start(this);
 		farming.start(this);
 		collectionLog.start(this);
-		GoalsPanel panel = new GoalsPanel();
+		GoalsPanel panel = new GoalsPanel(itemManager, skillIconManager);
 		goals.start(this, panel);
 		goalsButton = NavigationButton.builder()
 			.tooltip("Nib Tracker goals")

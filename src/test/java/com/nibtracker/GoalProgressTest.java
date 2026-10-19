@@ -41,7 +41,8 @@ public class GoalProgressTest
 		f.levels.put("woodcutting", 92);
 		GoalProgress.Result r = GoalProgress.compute(g, f);
 		assertEquals(0.5, r.progress, 0.001);
-		assertEquals("Level 92 / 99", r.detail);
+		assertEquals("92 / 99", r.detail);
+		assertEquals("6,517,178 XP to go", r.hint);
 		assertFalse(r.done);
 
 		f.xp.put("woodcutting", 13_034_431L);
@@ -60,7 +61,8 @@ public class GoalProgressTest
 		f.levels.put("runecraft", 40);
 		GoalProgress.Result r = GoalProgress.compute(g, f);
 		assertEquals(0.25, r.progress, 0.0001);
-		assertEquals("50,000 / 200,000 XP", r.detail);
+		assertEquals("50,000 / 200K", r.detail);
+		assertEquals("150,000 XP to go", r.hint);
 	}
 
 	@Test
@@ -74,7 +76,8 @@ public class GoalProgressTest
 		f.xp.put("magic", 0L);
 		GoalProgress.Result r = GoalProgress.compute(g, f);
 		assertEquals(0.5, r.progress, 0.0001);
-		assertEquals("Lowest level 1 / 70", r.detail);
+		assertEquals("Lowest 1", r.detail);
+		assertEquals("1 skill below 70, 737,627 XP to go", r.hint);
 		assertFalse(r.done);
 	}
 
@@ -85,13 +88,15 @@ public class GoalProgressTest
 		GoalProgress.Facts f = new GoalProgress.Facts();
 		GoalProgress.Result r = GoalProgress.compute(g, f);
 		assertEquals(0.4, r.progress, 0.0001);
-		assertEquals("40 / 100 kc", r.detail);
+		assertEquals("40 / 100", r.detail);
+		assertEquals("60 more kills", r.hint);
 
 		f.kcAliases = Collections.singletonMap("barrows", "barrows_chests");
 		f.kc.put(GoalProgress.metric("Barrows", f.kcAliases), 100);
 		r = GoalProgress.compute(g, f);
 		assertTrue(r.done);
-		assertEquals("100 / 100 kc", r.detail);
+		assertEquals("100 / 100", r.detail);
+		assertEquals("", r.hint);
 	}
 
 	@Test
@@ -153,5 +158,18 @@ public class GoalProgressTest
 		f.levels.put("attack", 1);
 		assertTrue(GoalProgress.compute(done, f).done);
 		assertEquals(100, done.points);
+	}
+
+	@Test
+	public void categoriesAndCompactNumbers()
+	{
+		assertEquals("Skills", GoalProgress.category("base_level"));
+		assertEquals("Quests", GoalProgress.category("quest"));
+		assertEquals("Bosses", GoalProgress.category("kc"));
+		assertEquals("Diaries", GoalProgress.category("diary_tier"));
+		assertEquals("Other", GoalProgress.category("something_new"));
+		assertEquals("13.0M", GoalProgress.compact(13_034_431));
+		assertEquals("250K", GoalProgress.compact(250_000));
+		assertEquals("99,999", GoalProgress.compact(99_999));
 	}
 }

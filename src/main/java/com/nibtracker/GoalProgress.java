@@ -85,18 +85,52 @@ final class GoalProgress
 		}
 	}
 
-	/** A goal's state for display. progress is 0..1, or -1 when there's nothing to measure. */
+	/**
+	 * A goal's state for display. progress is 0..1, or -1 when there's nothing to measure. detail is the short value
+	 * ("73 / 80"), hint what's left ("1,234,567 XP to go"); either may be empty.
+	 */
 	static final class Result
 	{
 		final double progress;
 		final String detail;
+		final String hint;
 		final boolean done;
 
-		Result(double progress, String detail, boolean done)
+		Result(double progress, String detail, String hint, boolean done)
 		{
 			this.progress = progress;
 			this.detail = detail;
+			this.hint = done ? "" : hint;
 			this.done = done;
+		}
+	}
+
+	/** The panel section a goal type goes in, in display order. */
+	static final String[] CATEGORIES = {"Skills", "Quests", "Bosses", "Collection log", "Items", "Diaries", "Combat tasks", "Other"};
+
+	static String category(String type)
+	{
+		switch (type)
+		{
+			case "skill_level":
+			case "skill_xp":
+			case "base_level":
+				return "Skills";
+			case "quest":
+				return "Quests";
+			case "kc":
+				return "Bosses";
+			case "clog_item":
+				return "Collection log";
+			case "item_owned":
+				return "Items";
+			case "diary_task":
+			case "diary_tier":
+				return "Diaries";
+			case "combat_achievement":
+				return "Combat tasks";
+			default:
+				return "Other";
 		}
 	}
 
@@ -142,7 +176,7 @@ final class GoalProgress
 		{
 			r = fromServer(g);
 		}
-		return g.done && !r.done ? new Result(1, "Done", true) : r;
+		return g.done && !r.done ? new Result(1, r.detail, "", true) : r;
 	}
 
 	private static Result local(Goal g, Facts f)
@@ -159,7 +193,7 @@ final class GoalProgress
 				{
 					return null;
 				}
-				return new Result(ratio(xp, xpFor(target)), "Level " + level + " / " + target, level >= target);
+				return new Result(ratio(xp, xpFor(target)), level + " / " + target, toGo(xpFor(target) - xp, " XP to go"), level >= target);
 			}
 			case "skill_xp":
 			{
@@ -169,7 +203,7 @@ final class GoalProgress
 				{
 					return null;
 				}
-				return new Result(ratio(xp, target), fmt(xp) + " / " + fmt(target) + " XP", xp >= target);
+				return new Result(ratio(xp, target), compact(xp) + " / " + compact(target), toGo(target - xp, " XP to go"), xp >= target);
 			}
 			case "base_level":
 			{
@@ -180,13 +214,21 @@ final class GoalProgress
 				}
 				double sum = 0;
 				int lowest = Integer.MAX_VALUE;
+				int below = 0;
+				long xpLeft = 0;
 				for (Map.Entry<String, Integer> s : f.levels.entrySet())
 				{
 					lowest = Math.min(lowest, s.getValue());
-					Long xp = f.xp.get(s.getKey());
-					sum += ratio(xp == null ? 0 : xp, xpFor(target));
+					long xp = f.xp.getOrDefault(s.getKey(), 0L);
+					sum += ratio(xp, xpFor(target));
+					if (s.getValue() < target)
+					{
+						below++;
+						xpLeft += Math.max(0, xpFor(target) - xp);
+					}
 				}
-				return new Result(sum / f.levels.size(), "Lowest level " + lowest + " / " + target, lowest >= target);
+				String hint = below == 0 ? "" : below + (below == 1 ? " skill" : " skills") + " below " + target + ", " + fmt(xpLeft) + " XP to go";
+				return new Result(sum / f.levels.size(), "Lowest " + lowest, hint, lowest >= target);
 			}
 			case "kc":
 			{
@@ -197,7 +239,7 @@ final class GoalProgress
 					return null;
 				}
 				double count = Math.max(seen, g.current);
-				return new Result(ratio(count, target), fmt(count) + " / " + fmt(target) + " kc", count >= target);
+				return new Result(ratio(count, target), fmt(count) + " / " + fmt(target), toGo(target - count, " more kills"), count >= target);
 			}
 			case "clog_item":
 			{
@@ -205,7 +247,7 @@ final class GoalProgress
 				{
 					return null;
 				}
-				return new Result(1, "In your collection log", true);
+				return new Result(1, "Obtained", "", true);
 			}
 			case "quest":
 			{
@@ -217,11 +259,11 @@ final class GoalProgress
 				switch (state)
 				{
 					case "FINISHED":
-						return new Result(1, "Completed", true);
+						return new Result(1, "Completed", "", true);
 					case "IN_PROGRESS":
-						return new Result(0.5, "In progress", false);
+						return new Result(0.5, "In progress", "Click for the quick guide", false);
 					default:
-						return new Result(0, "Not started", false);
+						return new Result(0, "Not started", "Click for the quick guide", false);
 				}
 			}
 			case "item_owned":
@@ -234,7 +276,8 @@ final class GoalProgress
 				{
 					return null;
 				}
-				return new Result(ratio(have, target), fmt(have) + " / " + fmt(target), have >= target);
+				String hint = f.bankSeen ? toGo(target - have, " more needed") : "Open your bank to count it";
+				return new Result(ratio(have, target), fmt(have) + " / " + fmt(target), hint, have >= target);
 			}
 			default:
 				return null;
@@ -243,9 +286,41 @@ final class GoalProgress
 
 	private static Result fromServer(Goal g)
 	{
-		String detail = g.target > 0 && g.current >= 0 ? fmt(g.current) + " / " + fmt(g.target) : g.done ? "Done" : "";
-		double p = g.done ? 1 : g.progress >= 0 ? Math.min(1, g.progress) : g.target > 0 && g.current >= 0 ? ratio(g.current, g.target) : -1;
-		return new Result(p, detail, g.done);
+		boolean counted = g.target > 0 && g.current >= 0;
+		String detail = counted ? fmt(g.current) + " / " + fmt(g.target) : g.done ? "Done" : "";
+		double p = g.done ? 1 : g.progress >= 0 ? Math.min(1, g.progress) : counted ? ratio(g.current, g.target) : -1;
+		String hint;
+		switch (g.type)
+		{
+			case "clog_item":
+				hint = "Not in your collection log yet";
+				break;
+			case "item_owned":
+				hint = "Open your bank to count it";
+				break;
+			default:
+				hint = "Updates when Nib Tracker sees it";
+		}
+		return new Result(p, detail, hint, g.done);
+	}
+
+	private static String toGo(double left, String what)
+	{
+		return left > 0 ? fmt(Math.ceil(left)) + what : "";
+	}
+
+	/** 13,034,431 as 13.0M and 250,000 as 250K, to keep the panel's value column narrow. */
+	static String compact(double n)
+	{
+		if (n >= 10_000_000)
+		{
+			return String.format(Locale.US, "%.1fM", n / 1_000_000);
+		}
+		if (n >= 100_000)
+		{
+			return Math.round(n / 1000) + "K";
+		}
+		return fmt(n);
 	}
 
 	/** A boss name as a Wise Old Man metric key, as the server's bt_wom_metric does, with its alias list. */
