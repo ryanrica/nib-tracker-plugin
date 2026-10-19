@@ -65,6 +65,8 @@ class GoalTracker
 	private JsonElement lastGoals;
 	private String planner;
 	private boolean received;
+	/* False while the server is older than the goals feed (its settings have no "goals"). */
+	private boolean serverGoals;
 	private final GoalProgress.Facts facts = new GoalProgress.Facts();
 	/* Canonical item id -> quantity, per container (bank, inventory, worn). */
 	private final Map<Integer, Map<Integer, Long>> containers = new HashMap<>();
@@ -103,6 +105,7 @@ class GoalTracker
 		lastGoals = null;
 		planner = null;
 		received = false;
+		serverGoals = false;
 		facts.xp.clear();
 		facts.levels.clear();
 		facts.kc.clear();
@@ -123,6 +126,7 @@ class GoalTracker
 	{
 		clientThread.invoke(() -> {
 			received = true;
+			serverGoals = settings.has("goals");
 			planner = plannerAccount;
 			JsonElement g = settings.get("goals");
 			if (!sink.allowed("goals", true))
@@ -333,9 +337,13 @@ class GoalTracker
 		{
 			message = "Choose which planner character this one syncs into on Nib Tracker's Account page.";
 		}
+		else if (!serverGoals)
+		{
+			message = "Nib Tracker's server isn't sending goals yet. It needs updating (plugin.sql).";
+		}
 		else if (rows.isEmpty())
 		{
-			message = "No open goals. Add some in Nib Tracker and they show up here a few seconds after it saves.";
+			message = "No open goals. Add some in Nib Tracker, or open it once with this character selected so it sends them.";
 		}
 		else
 		{
