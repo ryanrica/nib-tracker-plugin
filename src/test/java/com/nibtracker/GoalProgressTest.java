@@ -172,4 +172,11 @@ public class GoalProgressTest
 		assertEquals("250K", GoalProgress.compact(250_000));
 		assertEquals("99,999", GoalProgress.compact(99_999));
 	}
+
+	@Test
+	public void goalLinksGoToTheWebApp()
+	{
+		assertEquals("https://buntracker.pages.dev/#goal=gabc123&c=Kimchi%20Bun", GoalTracker.link("gabc123", "Kimchi Bun"));
+		assertEquals("https://buntracker.pages.dev/#goal=a%26b", GoalTracker.link("a&b", null));
+	}
 }

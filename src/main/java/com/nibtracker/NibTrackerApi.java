@@ -32,7 +32,9 @@ class NibTrackerApi
 	private static final String BASE = "https://adndcxzfizabkuiwuzwq.supabase.co/rest/v1/rpc/";
 	private static final String PUBLISHABLE_KEY = "sb_publishable_mrNOgXJ1KVgcKHjr0ucfWQ_IpI0YQqT";
 	/* Nib Tracker's own site stores screenshots, because only it holds the key that may write to storage. */
-	private static final String SCREENSHOT_URL = "https://buntracker.pages.dev/api/plugin/screenshot";
+	/* The Nib Tracker web app. Goal links in the panel and screenshots both go here. */
+	static final String SITE = "https://buntracker.pages.dev";
+	private static final String SCREENSHOT_URL = SITE + "/api/plugin/screenshot";
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 	private static final MediaType JPEG = MediaType.parse("image/jpeg");
 

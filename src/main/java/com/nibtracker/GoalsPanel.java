@@ -41,7 +41,7 @@ import net.runelite.http.api.item.ItemPrice;
 
 /**
  * The Goals side panel: the character's goals from Nib Tracker in sections (skills, quests, bosses...), each with an
- * icon, a bar coloured by how far along it is, and what's left. Clicking a goal opens its wiki page. Swing thread only.
+ * icon, a bar coloured by how far along it is, and what's left. Clicking a goal opens it in the Nib Tracker web app. Swing thread only.
  */
 class GoalsPanel extends PluginPanel
 {
@@ -254,7 +254,7 @@ class GoalsPanel extends PluginPanel
 		}
 		p.add(body, BorderLayout.CENTER);
 
-		p.setToolTipText("<html>" + escape(r.title) + (r.link != null ? "<br>Click to open the wiki" + ("Quests".equals(r.category) ? " quick guide" : "") : "") + "</html>");
+		p.setToolTipText("<html>" + escape(r.title) + (r.link != null ? "<br>Click to open it in Nib Tracker" : "") + "</html>");
 		if (r.link != null)
 		{
 			p.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));

@@ -261,9 +261,9 @@ final class GoalProgress
 					case "FINISHED":
 						return new Result(1, "Completed", "", true);
 					case "IN_PROGRESS":
-						return new Result(0.5, "In progress", "Click for the quick guide", false);
+						return new Result(0.5, "In progress", "Quick guide in Nib Tracker", false);
 					default:
-						return new Result(0, "Not started", "Click for the quick guide", false);
+						return new Result(0, "Not started", "Quick guide in Nib Tracker", false);
 				}
 			}
 			case "item_owned":

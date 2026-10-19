@@ -231,53 +231,38 @@ class GoalTracker
 			{
 				completed(g);
 			}
-			rows.add(row(g, r));
+			rows.add(row(g, r, planner));
 		}
 		refreshPanel(rows);
 	}
 
-	/** A goal as the panel shows it: its section, icon and wiki page come from its type and parameters. */
-	private static GoalsPanel.Row row(GoalProgress.Goal g, GoalProgress.Result r)
+	/** A goal as the panel shows it: its section and icon come from its type and parameters. */
+	private static GoalsPanel.Row row(GoalProgress.Goal g, GoalProgress.Result r, String planner)
 	{
 		String category = GoalProgress.category(g.type);
 		Skill skill = null;
 		String item = null;
-		String page = null;
 		switch (g.type)
 		{
 			case "skill_level":
 			case "skill_xp":
 				skill = skill(g.str("skill"));
-				page = skill != null ? skill.getName() + " training" : null;
-				break;
-			case "base_level":
-				page = "Skills";
 				break;
 			case "kc":
 				skill = Skill.SLAYER;
-				page = g.str("boss").replace('_', ' ');
-				break;
-			case "quest":
-				page = g.str("quest") + "/Quick guide";
 				break;
 			case "clog_item":
 			case "item_owned":
 				item = g.str("item");
-				page = item;
-				break;
-			case "diary_task":
-			case "diary_tier":
-				page = g.str("region") + " Diary";
 				break;
 			case "combat_achievement":
 				skill = Skill.ATTACK;
-				page = g.str("task");
 				break;
 			default:
 				break;
 		}
 		return new GoalsPanel.Row(category, g.title, r.detail, r.hint, r.progress, r.done, g.points, skill,
-			item == null || item.isEmpty() ? null : item, GoalsPanel.fallbackItem(category), wiki(page));
+			item == null || item.isEmpty() ? null : item, GoalsPanel.fallbackItem(category), link(g.id, planner));
 	}
 
 	private static Skill skill(String name)
@@ -293,20 +278,20 @@ class GoalTracker
 		return null;
 	}
 
-	/** The OSRS Wiki page for a name (its search finds the closest page when the name isn't exact). */
-	private static String wiki(String page)
+	/**
+	 * The goal in the Nib Tracker web app: its Roadmap, focused on the goal (or the tab already open there). The address
+	 * is fixed here; only the goal's id and character name come from the server, and both are encoded.
+	 */
+	static String link(String goalId, String planner)
 	{
-		if (page == null || page.trim().isEmpty())
-		{
-			return null;
-		}
 		try
 		{
-			return "https://oldschool.runescape.wiki/w/Special:Search?search=" + URLEncoder.encode(page.trim(), "UTF-8");
+			return NibTrackerApi.SITE + "/#goal=" + URLEncoder.encode(goalId, "UTF-8")
+				+ (planner == null ? "" : "&c=" + URLEncoder.encode(planner, "UTF-8").replace("+", "%20"));
 		}
 		catch (UnsupportedEncodingException e)
 		{
-			return null;
+			return NibTrackerApi.SITE;
 		}
 	}
 

@@ -19,7 +19,8 @@ planner character it should sync into (or makes a new one).
 Click the **Nib Tracker goals** button (a small gold target) on RuneLite's sidebar to see the goals you set in Nib Tracker
 for the character you're logged in on, grouped into skills, quests, bosses, collection log, items, diaries and combat
 tasks (click a heading to fold it away). Each goal shows how far along it is, with a bar that goes from red to green, and
-what's left ("88,113 XP to go", "288 more kills"). Click a goal to open its OSRS Wiki page, or a quest's quick guide.
+what's left ("88,113 XP to go", "288 more kills"). Click a goal to open it on Nib Tracker's Roadmap; if the site is already open in your browser, that tab
+switches to the goal instead of a new one staying open.
 Skill, XP, base level, kill count, collection log, quest and item goals update as you play; other goals show the
 progress Nib Tracker last worked out.
 
