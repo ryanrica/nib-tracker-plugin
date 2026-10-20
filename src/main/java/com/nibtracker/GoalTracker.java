@@ -385,7 +385,7 @@ class GoalTracker
 				.type(ChatMessageType.GAMEMESSAGE)
 				.runeLiteFormattedMessage(new ChatMessageBuilder()
 					.append(ChatColorType.HIGHLIGHT).append("Nib Tracker goal complete: ")
-					.append(ChatColorType.NORMAL).append(g.title + points)
+					.append(ChatColorType.NORMAL).append(Text.escapeJagex(g.title) + points)
 					.build())
 				.build());
 		}

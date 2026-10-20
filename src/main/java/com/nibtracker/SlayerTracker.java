@@ -7,6 +7,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.api.events.VarbitChanged;
+import net.runelite.api.gameval.DBTableID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.eventbus.Subscribe;
@@ -15,15 +16,9 @@ import net.runelite.client.eventbus.Subscribe;
 @Singleton
 class SlayerTracker
 {
-	/* Game database tables and columns for task names and locations (as RuneLite's Slayer plugin uses them). */
+	/* Game database tables and columns for task names and locations (as RuneLite's Slayer plugin uses them). The boss task
+	   id has no named constant in RuneLite's API. */
 	private static final int TASK_BOSS_ID = 98;
-	private static final int DB_TASKS = 113;
-	private static final int DB_TASKS_NAME = 10;
-	private static final int DB_BOSSES = 116;
-	private static final int DB_BOSSES_ID = 1;
-	private static final int DB_BOSSES_NAME = 4;
-	private static final int DB_AREAS = 115;
-	private static final int DB_AREAS_NAME = 3;
 	/* While a task counts down, progress is sent at most this often. */
 	private static final int PROGRESS_EVERY_TICKS = 50;
 
@@ -124,14 +119,14 @@ class SlayerTracker
 		if (remaining > 0)
 		{
 			String name = taskId == TASK_BOSS_ID
-				? field(DB_BOSSES, DB_BOSSES_ID, client.getVarbitValue(VarbitID.SLAYER_TARGET_BOSSID), DB_BOSSES_NAME)
-				: field(DB_TASKS, 0, taskId, DB_TASKS_NAME);
+				? field(DBTableID.SlayerTaskSublist.ID, DBTableID.SlayerTaskSublist.COL_TASK_SUBTABLE_ID, client.getVarbitValue(VarbitID.SLAYER_TARGET_BOSSID), DBTableID.SlayerTaskSublist.COL_TASK)
+				: field(DBTableID.SlayerTask.ID, DBTableID.SlayerTask.COL_ID, taskId, DBTableID.SlayerTask.COL_NAME_UPPERCASE);
 			if (name != null)
 			{
 				d.addProperty("name", name);
 			}
 			int area = client.getVarpValue(VarPlayerID.SLAYER_AREA);
-			String location = area > 0 ? field(DB_AREAS, 0, area, DB_AREAS_NAME) : null;
+			String location = area > 0 ? field(DBTableID.SlayerArea.ID, DBTableID.SlayerArea.COL_AREA_ID, area, DBTableID.SlayerArea.COL_AREA_NAME_IN_HELPER) : null;
 			if (location != null)
 			{
 				d.addProperty("location", location);

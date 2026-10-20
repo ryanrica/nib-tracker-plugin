@@ -59,14 +59,20 @@ Only your own character's data, and only while **Sync to Nib Tracker** is on. Ea
 - **Bank and gear**: bank, seed vault, worn equipment and inventory, when they change
 - **Grand Exchange**: offers placed, filled and cancelled
 - **Farming timers**: patches and bird houses, as RuneLite's Time Tracking plugin records them
-- **Bingo screenshots**: when you get an item that's on one of your groups' live bingo drop tiles, a picture of the game
-  is attached to the tile as proof
+- **Bingo screenshots** (off unless you turn it on): when you get an item that's on one of your groups' live bingo drop
+  tiles, a picture of the game screen (everything visible, chat included) is attached to the tile as proof
 
 Every batch also says who you are: your name, which game mode you're on (normal, a league, Deadman), and a one-way id
 made from your account hash, so name changes and league profiles are kept apart.
 
 It goes to Nib Tracker's server (Supabase), and screenshots to Nib Tracker's site (buntracker.pages.dev), linked to your
 Nib Tracker account by the plugin key. Revoke the key on the Account page at any time.
+
+## What it receives
+
+Plain data only: your goals for the Goals panel, which of the sources above the server wants, and a list of your own
+game values (quest, diary and combat achievement progress) to report as they change. The plugin never downloads or runs
+code. Clicking a goal opens a page in your web browser (Nib Tracker or the OSRS Wiki); nothing opens on its own.
 
 This plugin submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers.
 

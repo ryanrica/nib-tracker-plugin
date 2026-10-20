@@ -871,6 +871,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 
 	private void chat(String msg)
 	{
-		clientThread.invoke(() -> client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", msg, null));
+		// Escaped, so names and messages from the server show as plain text and can't add colours or icons.
+		clientThread.invoke(() -> client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Text.escapeJagex(msg), null));
 	}
 }

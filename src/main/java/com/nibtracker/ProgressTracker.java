@@ -45,8 +45,8 @@ class ProgressTracker
 	};
 	private static final String[] DIARY_TIERS = {"easy", "medium", "hard", "elite"};
 
-	/* Combat achievements: one enum of task structs per tier; each struct has the task's id and name. A task is done
-	   when bit (id % 32) of CA_TASK_COMPLETED_(id / 32) is set. */
+	/* Combat achievements: one enum of task structs per tier (no named constants for these in RuneLite's API); each
+	   struct has the task's id and name. A task is done when bit (id % 32) of CA_TASK_COMPLETED_(id / 32) is set. */
 	private static final int[] CA_TIER_ENUMS = {3981, 3982, 3983, 3984, 3985, 3986};
 	private static final String[] CA_TIERS = {"Easy", "Medium", "Hard", "Elite", "Master", "Grandmaster"};
 	private static final int CA_PARAM_ID = 1306;
@@ -61,6 +61,8 @@ class ProgressTracker
 	};
 	/* Watched values are sent at most this often while they change. */
 	private static final int VARS_EVERY_TICKS = 10;
+	/* Watch list ids from the server above this are ignored (the game has far fewer varps and varbits). */
+	private static final int MAX_VAR_ID = 65536;
 
 	@Inject
 	private Client client;
@@ -321,13 +323,24 @@ class ProgressTracker
 		JsonObject varbits = new JsonObject();
 		if (varsFull)
 		{
+			int varpCount = client.getVarps().length;
 			for (int id : watchVarps)
 			{
-				varps.addProperty(String.valueOf(id), client.getVarpValue(id));
+				if (id < varpCount)
+				{
+					varps.addProperty(String.valueOf(id), client.getVarpValue(id));
+				}
 			}
 			for (int id : watchVarbits)
 			{
-				varbits.addProperty(String.valueOf(id), client.getVarbitValue(id));
+				try
+				{
+					varbits.addProperty(String.valueOf(id), client.getVarbitValue(id));
+				}
+				catch (RuntimeException ex)
+				{
+					// Not a varbit in this game version: skip it.
+				}
 			}
 		}
 		else
@@ -375,9 +388,14 @@ class ProgressTracker
 		}
 		for (JsonElement e : list.getAsJsonArray())
 		{
-			if (e.isJsonPrimitive() && out.size() < 500)
+			// Only plain ids in the game's range; anything else from the server is ignored.
+			if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber() && out.size() < 500)
 			{
-				out.add(e.getAsInt());
+				int id = e.getAsInt();
+				if (id >= 0 && id < MAX_VAR_ID)
+				{
+					out.add(id);
+				}
 			}
 		}
 		return out;

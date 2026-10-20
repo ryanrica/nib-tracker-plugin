@@ -31,8 +31,8 @@ class NibTrackerApi
 	   the server checks the plugin key on every call. */
 	private static final String BASE = "https://adndcxzfizabkuiwuzwq.supabase.co/rest/v1/rpc/";
 	private static final String PUBLISHABLE_KEY = "sb_publishable_mrNOgXJ1KVgcKHjr0ucfWQ_IpI0YQqT";
-	/* Nib Tracker's own site stores screenshots, because only it holds the key that may write to storage. */
-	/* The Nib Tracker web app. Goal links in the panel and screenshots both go here. */
+	/* The Nib Tracker web app. Goal links in the panel open it; screenshots go to it because only it holds the key that
+	   may write to storage. */
 	static final String SITE = "https://buntracker.pages.dev";
 	private static final String SCREENSHOT_URL = SITE + "/api/plugin/screenshot";
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");

@@ -127,9 +127,16 @@ public interface NibTrackerConfig extends Config
 		return true;
 	}
 
-	@ConfigItem(keyName = "sendScreenshots", name = "Bingo screenshots", description = "Capture the game when you get an item on one of your live bingo drop tiles, and attach it as proof", section = sources, position = 22)
+	@ConfigItem(
+		keyName = "sendScreenshots",
+		name = "Bingo screenshots",
+		description = "When you get an item on one of your live bingo drop tiles, capture the game screen (everything visible, including chat) and send it to Nib Tracker as proof for your group",
+		warning = WARNING,
+		section = sources,
+		position = 22
+	)
 	default boolean sendScreenshots()
 	{
-		return true;
+		return false;
 	}
 }
