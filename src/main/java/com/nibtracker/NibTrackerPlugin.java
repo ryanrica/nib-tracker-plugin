@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
@@ -160,7 +161,8 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	private volatile long nextHelloAt;
 	private volatile JsonObject settings = new JsonObject();
 
-	private volatile boolean inFlight;
+	/* One batch at a time: send() runs on the scheduler, and on the client thread at logout and shutdown. */
+	private final AtomicBoolean inFlight = new AtomicBoolean();
 	private volatile long nextSendAt;
 	private volatile long backoffMs;
 	private volatile long lastSentAt;
@@ -582,7 +584,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	{
 		linked = false;
 		helloSent = false;
-		inFlight = false;
+		inFlight.set(false);
 		backoffMs = 0;
 		nextSendAt = 0;
 		nextHelloAt = 0;
@@ -739,8 +741,20 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		});
 	}
 
-	/** Scheduler thread, once a second. */
+	/** Scheduler thread, once a second. An exception would stop the scheduler running it again, so none gets out. */
 	private void tick()
+	{
+		try
+		{
+			tickOnce();
+		}
+		catch (RuntimeException e)
+		{
+			log.debug("Nib Tracker tick failed", e);
+		}
+	}
+
+	private void tickOnce()
 	{
 		if (!helloSent && who != null && config.syncEnabled() && System.currentTimeMillis() >= nextHelloAt)
 		{
@@ -762,7 +776,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	{
 		long t = System.currentTimeMillis();
 		Pending first = queue.peekFirst();
-		if (!linked || inFlight || first == null || (!now && t < nextSendAt))
+		if (!linked || first == null || (!now && t < nextSendAt) || !inFlight.compareAndSet(false, true))
 		{
 			return;
 		}
@@ -774,11 +788,15 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		JsonArray arr = new JsonArray();
 		batch.forEach(x -> arr.add(x.ev));
-		inFlight = true;
+		if (batch.isEmpty())
+		{
+			inFlight.set(false); // another thread took these events first
+			return;
+		}
 		lastSentAt = t;
 		api.ingest(config.pluginKey().trim(), first.who, arr, r -> {
-			inFlight = false;
-			if (r != null && r.has("ok") && r.get("ok").getAsBoolean())
+			inFlight.set(false);
+			if (r != null && r.has("ok") && r.get("ok").isJsonPrimitive() && r.get("ok").getAsBoolean())
 			{
 				backoffMs = 0;
 				nextSendAt = 0;
@@ -796,6 +814,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			{
 				linked = false;
 				queue.clear();
+				screenshots.reset(); // their events will never reach the server, so free the space they hold
 				chat(problem(r));
 				return;
 			}

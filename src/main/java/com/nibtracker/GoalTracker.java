@@ -117,6 +117,8 @@ class GoalTracker
 	private final GoalProgress.Facts facts = new GoalProgress.Facts();
 	/* Canonical item id -> quantity, per container (bank, inventory, worn). */
 	private final Map<Integer, Map<Integer, Long>> containers = new HashMap<>();
+	/* The containers changed since item names were last counted from them (that lookup is skipped otherwise). */
+	private boolean namesDirty = true;
 	/* Whether each goal was done when last worked out this session: a completion is a change from false to true. */
 	private final Map<String, Boolean> wasDone = new HashMap<>();
 	private final Set<String> announced = new HashSet<>();
@@ -194,6 +196,7 @@ class GoalTracker
 		facts.carried.clear();
 		facts.bankSeen = false;
 		containers.clear();
+		namesDirty = true;
 		wasDone.clear();
 		announced.clear();
 		popup.reset();
@@ -285,6 +288,7 @@ class GoalTracker
 			}
 		}
 		containers.put(id, counts);
+		namesDirty = true;
 		dirty = true;
 	}
 
@@ -344,8 +348,7 @@ class GoalTracker
 		{
 			GoalProgress.Result r = GoalProgress.compute(g, facts);
 			results.put(g.id, r);
-			Boolean before = wasDone.put(g.id, r.done);
-			if (Boolean.FALSE.equals(before) && r.done && announced.add(g.id))
+			if (GoalProgress.justCompleted(wasDone, announced, g.id, r.done))
 			{
 				finishedThisSession.add(g.id);
 				completed(g);
@@ -870,7 +873,7 @@ class GoalTracker
 			}
 		}
 		questsDirty = false;
-		if (items)
+		if (items && namesDirty)
 		{
 			facts.bankSeen = containers.containsKey(InventoryID.BANK);
 			facts.bank.clear();
@@ -879,6 +882,7 @@ class GoalTracker
 			names(containers.get(InventoryID.SEED_VAULT), facts.bank);
 			names(containers.get(InventoryID.INV), facts.carried);
 			names(containers.get(InventoryID.WORN), facts.carried);
+			namesDirty = false;
 		}
 	}
 

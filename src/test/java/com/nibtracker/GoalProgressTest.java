@@ -5,7 +5,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import com.google.gson.JsonParser;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.junit.Test;
 
 public class GoalProgressTest
@@ -214,5 +218,40 @@ public class GoalProgressTest
 		assertEquals("53%", GoalProgress.shortText("1,234,567 / 13.0M", 0.53, false));
 		assertEquals("40%", GoalProgress.shortText("", 0.4, false));
 		assertEquals("Done", GoalProgress.shortText("73 / 80", 1, true));
+	}
+
+	@Test
+	public void alreadyDoneAtLoginIsNotAnnounced()
+	{
+		Map<String, Boolean> wasDone = new HashMap<>();
+		Set<String> announced = new HashSet<>();
+		assertFalse(GoalProgress.justCompleted(wasDone, announced, "a", true));
+		assertFalse(GoalProgress.justCompleted(wasDone, announced, "a", true));
+		assertTrue(announced.isEmpty());
+	}
+
+	@Test
+	public void finishingThisSessionIsAnnouncedOnce()
+	{
+		Map<String, Boolean> wasDone = new HashMap<>();
+		Set<String> announced = new HashSet<>();
+		assertFalse(GoalProgress.justCompleted(wasDone, announced, "a", false));
+		assertTrue(GoalProgress.justCompleted(wasDone, announced, "a", true));
+		assertFalse(GoalProgress.justCompleted(wasDone, announced, "a", true));
+		// Dipping back below (a level drained, an item dropped) and finishing again doesn't announce it twice.
+		assertFalse(GoalProgress.justCompleted(wasDone, announced, "a", false));
+		assertFalse(GoalProgress.justCompleted(wasDone, announced, "a", true));
+	}
+
+	@Test
+	public void serverDoneStaysDone()
+	{
+		GoalProgress.Goal g = goal("{\"id\":\"a\",\"type\":\"skill_level\",\"done\":true,\"params\":{\"skill\":\"Attack\",\"level\":99}}");
+		GoalProgress.Facts f = new GoalProgress.Facts();
+		f.xp.put("attack", 0L);
+		f.levels.put("attack", 1);
+		GoalProgress.Result r = GoalProgress.compute(g, f);
+		assertTrue(r.done);
+		assertEquals(1, r.progress, 0);
 	}
 }

@@ -110,21 +110,24 @@ class NibTrackerApi
 			@Override
 			public void onResponse(Call call, Response res)
 			{
+				// Read the reply first, then hand it on once, so an error in the callback can't make it run twice.
+				JsonObject reply = null;
 				try (ResponseBody rb = res.body())
 				{
 					if (!res.isSuccessful() || rb == null)
 					{
 						log.debug("Nib Tracker {} returned HTTP {}", fn, res.code());
-						done.accept(null);
-						return;
 					}
-					done.accept(gson.fromJson(rb.charStream(), JsonObject.class));
+					else
+					{
+						reply = gson.fromJson(rb.charStream(), JsonObject.class);
+					}
 				}
 				catch (Exception e)
 				{
 					log.debug("Nib Tracker {} sent an unreadable reply", fn, e);
-					done.accept(null);
 				}
+				done.accept(reply);
 			}
 		});
 	}

@@ -202,6 +202,17 @@ final class GoalProgress
 		return g.done && !r.done ? new Result(1, r.detail, "", true) : r;
 	}
 
+	/**
+	 * Records whether a goal is done now and says if it has just completed: it was seen not done earlier this session
+	 * and is done now, and hasn't been announced before. A goal already done the first time it's seen (at login, or
+	 * when it first arrives from the server) never counts, so logging in doesn't bring up old pop-ups.
+	 */
+	static boolean justCompleted(Map<String, Boolean> wasDone, Set<String> announced, String id, boolean done)
+	{
+		Boolean before = wasDone.put(id, done);
+		return Boolean.FALSE.equals(before) && done && announced.add(id);
+	}
+
 	private static Result local(Goal g, Facts f)
 	{
 		switch (g.type)
