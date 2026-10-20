@@ -127,6 +127,33 @@ public interface NibTrackerConfig extends Config
 		return true;
 	}
 
+	enum OverlaySize
+	{
+		SMALL(20), MEDIUM(26), LARGE(34);
+
+		final int px;
+
+		OverlaySize(int px)
+		{
+			this.px = px;
+		}
+	}
+
+	@ConfigItem(keyName = "overlaySize", name = "On-screen goal size", description = "How big goals you show on the game screen are (right-click a goal in the Goals panel to show it). Hold Alt to move them.", section = goals, position = 33)
+	default OverlaySize overlaySize()
+	{
+		return OverlaySize.SMALL;
+	}
+
+	/* The goals shown on the game screen, by id. Set from the Goals panel's right-click menu. */
+	String PINNED_GOALS = "pinnedGoals";
+
+	@ConfigItem(keyName = PINNED_GOALS, name = "", description = "", hidden = true)
+	default String pinnedGoals()
+	{
+		return "";
+	}
+
 	@ConfigItem(
 		keyName = "sendScreenshots",
 		name = "Bingo screenshots",

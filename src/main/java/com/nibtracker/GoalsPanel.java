@@ -2,6 +2,8 @@ package com.nibtracker;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Graphics;
@@ -17,13 +19,17 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import net.runelite.api.Skill;
 import net.runelite.api.gameval.ItemID;
@@ -65,6 +71,9 @@ class GoalsPanel extends PluginPanel
 		boolean serverDone;
 		int partsDone;
 		int partsTotal;
+		/* Shown under its goal but not a part of it (the current Slayer task); and whether it's shown on the game screen. */
+		boolean extra;
+		boolean pinned;
 
 		Row(String id, String category, String title, String detail, String hint, double progress, boolean done, int points,
 			Skill skill, String item, int fallbackItem, String link)
@@ -108,6 +117,8 @@ class GoalsPanel extends PluginPanel
 	private final Set<String> collapsed = new HashSet<>(Collections.singleton(COMPLETED));
 	private final Set<String> showAll = new HashSet<>();
 	private final Set<String> expanded = new HashSet<>();
+	/* Called with a goal's id when it's put on or taken off the game screen. */
+	private Consumer<String> onPin = id -> { };
 
 	private final JLabel heading = new JLabel("Goals");
 	private final JLabel summary = new JLabel();
@@ -207,6 +218,10 @@ class GoalsPanel extends PluginPanel
 		int partsDone = g.partsDone(), partsTotal = g.partsTotal();
 		String detail = g.main.progress < 0 && partsTotal > 0 && !g.main.done ? partsDone + " / " + partsTotal : g.main.detail;
 		list.add(row(g.main, g.progress(), detail, 0));
+		for (Row x : g.extras)
+		{
+			list.add(row(x, x.progress, x.detail, PART_INDENT));
+		}
 		if (g.parts.isEmpty())
 		{
 			return;
@@ -318,10 +333,14 @@ class GoalsPanel extends PluginPanel
 		}
 
 		String hint = r.done ? (r.points > 0 ? "+" + r.points + " points" : "") : r.hint;
-		if (!hint.isEmpty() || (!r.done && measured))
+		if (!hint.isEmpty() || (!r.done && measured) || r.pinned)
 		{
 			String text = r.done || !measured ? hint : hint.isEmpty() ? Math.round(progress * 100) + "%"
 				: hint + "  ·  " + Math.round(progress * 100) + "%";
+			if (r.pinned)
+			{
+				text = text.isEmpty() ? "On screen" : text + "  ·  On screen";
+			}
 			// Wraps to the row's width, so a task description is shown in full.
 			JLabel h = new JLabel("<html><div style='width:" + (HINT_WIDTH - indent) + "px'>" + escape(text) + "</div></html>");
 			h.setFont(FontManager.getRunescapeSmallFont());
@@ -330,7 +349,15 @@ class GoalsPanel extends PluginPanel
 		}
 		p.add(body, BorderLayout.CENTER);
 
-		p.setToolTipText("<html>" + escape(r.title) + (r.link == null ? "" : r.link.startsWith(GoalTracker.WIKI) ? "<br>Click for the OSRS Wiki" : "<br>Click to open it in Nib Tracker") + "</html>");
+		p.setToolTipText("<html>" + escape(r.title) + (r.link == null ? "" : r.link.startsWith(GoalTracker.WIKI) ? "<br>Click for the OSRS Wiki" : "<br>Click to open it in Nib Tracker")
+			+ "<br>Right-click to " + (r.pinned ? "remove it from" : "show it on") + " the game screen</html>");
+		// Right-click: show this goal on the game screen, or take it off.
+		JPopupMenu menu = new JPopupMenu();
+		JMenuItem pin = new JMenuItem(r.pinned ? "Remove from game screen" : "Show on game screen");
+		pin.addActionListener(e -> onPin.accept(r.id));
+		menu.add(pin);
+		p.setComponentPopupMenu(menu);
+		inheritMenu(p);
 		if (r.link != null)
 		{
 			p.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -339,7 +366,10 @@ class GoalsPanel extends PluginPanel
 				@Override
 				public void mouseClicked(MouseEvent e)
 				{
-					LinkBrowser.browse(r.link);
+					if (SwingUtilities.isLeftMouseButton(e))
+					{
+						LinkBrowser.browse(r.link);
+					}
 				}
 
 				@Override
@@ -408,6 +438,28 @@ class GoalsPanel extends PluginPanel
 			icons.put(key, i);
 			label.setIcon(i);
 		});
+	}
+
+	/** Sets what happens when a goal is put on or taken off the game screen. */
+	void onPin(Consumer<String> onPin)
+	{
+		this.onPin = onPin;
+	}
+
+	/* The right-click menu works anywhere on the row, labels included. */
+	private static void inheritMenu(Container c)
+	{
+		for (Component k : c.getComponents())
+		{
+			if (k instanceof JComponent)
+			{
+				((JComponent) k).setInheritsPopupMenu(true);
+			}
+			if (k instanceof Container)
+			{
+				inheritMenu((Container) k);
+			}
+		}
 	}
 
 	private static BufferedImage fit(BufferedImage img)

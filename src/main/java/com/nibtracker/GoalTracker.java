@@ -2,12 +2,14 @@ package com.nibtracker;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import java.awt.image.BufferedImage;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,14 +27,18 @@ import net.runelite.api.Skill;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.gameval.InventoryID;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatColorType;
 import net.runelite.client.chat.ChatMessageBuilder;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.util.Text;
+import net.runelite.http.api.item.ItemPrice;
 
 /**
  * The character's goals from Nib Tracker (settings.goals), their progress, and a pop-up and chat line when one
@@ -60,7 +66,26 @@ class GoalTracker
 	@Inject
 	private GoalPopup popup;
 
+	@Inject
+	private SlayerTracker slayer;
+
+	@Inject
+	private GoalOverlay overlay;
+
+	@Inject
+	private ConfigManager configManager;
+
+	@Inject
+	private SkillIconManager skillIcons;
+
+	/* The id the current Slayer task has in the panel and on screen. */
+	static final String SLAYER_TASK = "slayer-task";
+
 	private EventSink sink;
+	private int slayerSeen = -1;
+	/* Icons for the on-screen goals, and item ids found by name, so each is looked up once. */
+	private final Map<String, BufferedImage> overlayIcons = new HashMap<>();
+	private final Map<String, Integer> itemIds = new HashMap<>();
 	private GoalsPanel panel;
 
 	private List<GoalProgress.Goal> goals = Collections.emptyList();
@@ -88,7 +113,33 @@ class GoalTracker
 		finishedThisSession.clear();
 		this.sink = sink;
 		this.panel = panel;
+		panel.onPin(this::togglePin);
 		dirty = true;
+	}
+
+	/** Swing thread. Puts a goal on the game screen, or takes it off; remembered in the plugin's settings. */
+	void togglePin(String id)
+	{
+		Set<String> pins = pins();
+		if (!pins.remove(id))
+		{
+			pins.add(id);
+		}
+		configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.PINNED_GOALS, String.join(",", pins));
+		dirty = true;
+	}
+
+	private Set<String> pins()
+	{
+		Set<String> out = new LinkedHashSet<>();
+		for (String s : config.pinnedGoals().split(","))
+		{
+			if (!s.trim().isEmpty())
+			{
+				out.add(s.trim());
+			}
+		}
+		return out;
 	}
 
 	/** Logged in and stats loaded. */
@@ -124,6 +175,7 @@ class GoalTracker
 		wasDone.clear();
 		announced.clear();
 		popup.reset();
+		overlay.set(Collections.emptyList());
 		dirty = true;
 	}
 
@@ -215,6 +267,11 @@ class GoalTracker
 	/** Once a game tick: works the goals out again if anything changed. */
 	void tick()
 	{
+		if (slayer.version() != slayerSeen)
+		{
+			slayerSeen = slayer.version();
+			dirty = true;
+		}
 		if (!dirty)
 		{
 			return;
@@ -222,6 +279,7 @@ class GoalTracker
 		dirty = false;
 		if (!sink.active() || goals.isEmpty())
 		{
+			overlay.set(Collections.emptyList());
 			refreshPanel(Collections.emptyList());
 			return;
 		}
@@ -250,7 +308,95 @@ class GoalTracker
 			}
 			rows.add(row(g, r, planner));
 		}
+		GoalsPanel.Row task = slayerTaskRow(results);
+		if (task != null)
+		{
+			rows.add(task);
+		}
+		Set<String> pins = pins();
+		List<GoalOverlay.Entry> onScreen = new ArrayList<>();
+		for (GoalsPanel.Row r : rows)
+		{
+			r.pinned = pins.contains(r.id);
+			if (r.pinned)
+			{
+				onScreen.add(new GoalOverlay.Entry(overlayIcon(r), GoalProgress.shortText(r.detail, r.progress, r.done), r.progress, r.done));
+			}
+		}
+		overlay.set(onScreen);
 		refreshPanel(rows);
+	}
+
+	/**
+	 * The current Slayer task, under the first open Slayer level or XP goal: its name, kills left and a bar for kills
+	 * done out of the task. Null when there's no such goal or no task.
+	 */
+	private GoalsPanel.Row slayerTaskRow(Map<String, GoalProgress.Result> results)
+	{
+		JsonObject t = slayer.current();
+		if (t == null || !t.has("name") || t.get("remaining").getAsInt() <= 0)
+		{
+			return null;
+		}
+		GoalProgress.Goal goal = null;
+		for (GoalProgress.Goal g : goals)
+		{
+			if (("skill_level".equals(g.type) || "skill_xp".equals(g.type)) && "slayer".equals(GoalProgress.skillKey(g.str("skill"))) && !results.get(g.id).done)
+			{
+				goal = g;
+				break;
+			}
+		}
+		if (goal == null)
+		{
+			return null;
+		}
+		int left = t.get("remaining").getAsInt(), amount = Math.max(left, t.has("amount") ? t.get("amount").getAsInt() : left);
+		String where = t.has("location") ? t.get("location").getAsString() : "";
+		GoalsPanel.Row row = new GoalsPanel.Row(SLAYER_TASK, "Skills", "Task: " + t.get("name").getAsString(),
+			left + " left", (amount - left) + " of " + amount + " killed" + (where.isEmpty() ? "" : "  ·  " + where),
+			amount > 0 ? (double) (amount - left) / amount : -1, false, 0, null, null, ItemID.SLAYER_GEM, NibTrackerApi.SITE + "/#slayer");
+		row.parent = goal.id;
+		row.extra = true;
+		return row;
+	}
+
+	/** The icon for a goal on screen: its skill, its item, or a picture for its kind. Looked up once. */
+	private BufferedImage overlayIcon(GoalsPanel.Row r)
+	{
+		String key = r.skill != null ? "skill:" + r.skill.name() : r.item != null ? "item:" + r.item.toLowerCase(Locale.ROOT) : "id:" + r.fallbackItem;
+		BufferedImage cached = overlayIcons.get(key);
+		if (cached != null)
+		{
+			return cached;
+		}
+		BufferedImage img = null;
+		if (r.skill != null)
+		{
+			img = skillIcons.getSkillImage(r.skill, true);
+		}
+		else
+		{
+			int id = r.item == null ? r.fallbackItem : itemIds.computeIfAbsent(r.item.toLowerCase(Locale.ROOT), k -> {
+				for (ItemPrice p : itemManager.search(r.item))
+				{
+					if (p.getName().equalsIgnoreCase(r.item))
+					{
+						return p.getId();
+					}
+				}
+				return r.fallbackItem;
+			});
+			if (id > 0)
+			{
+				img = itemManager.getImage(id);
+			}
+		}
+		if (img != null)
+		{
+			overlayIcons.put(key, img);
+		}
+		return img;
 	}
 
 	/** A goal as the panel shows it: its section and icon come from its type and parameters. */
@@ -459,7 +605,7 @@ class GoalTracker
 		for (GoalsPanel.Row r : rows)
 		{
 			key.append('|').append(r.title).append(r.detail).append(r.hint).append(Math.round(r.progress * 1000)).append(r.done)
-				.append(r.parent).append(r.partsDone).append('/').append(r.partsTotal);
+				.append(r.parent).append(r.partsDone).append('/').append(r.partsTotal).append(r.pinned);
 		}
 		if (key.toString().equals(shown))
 		{

@@ -58,4 +58,20 @@ public class GoalLayoutTest
 		assertEquals("orphan", l.sections.get("Skills").get(0).main.id);
 		assertEquals(1, l.sections.size());
 	}
+
+	@Test
+	public void extrasShowUnderTheirGoalButAreNotParts()
+	{
+		GoalsPanel.Row slayer = row("s95", "Skills", 0.4, false, "");
+		GoalsPanel.Row task = row(GoalTracker.SLAYER_TASK, "Skills", 0.5, false, "s95");
+		task.extra = true;
+		GoalsPanel.Row lost = row("x", "Skills", 0.5, false, "missing");
+		lost.extra = true;
+		GoalLayout.Layout l = GoalLayout.of(Arrays.asList(slayer, task, lost));
+		GoalLayout.Group g = l.sections.get("Skills").get(0);
+		assertEquals(1, l.sections.get("Skills").size());
+		assertEquals(GoalTracker.SLAYER_TASK, g.extras.get(0).id);
+		assertTrue(g.parts.isEmpty());
+		assertEquals(0, g.partsTotal());
+	}
 }

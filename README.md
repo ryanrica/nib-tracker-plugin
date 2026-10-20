@@ -25,6 +25,13 @@ Goals made of parts are folded into one row: "Base 80 in every skill" shows your
 are done, and you open it to see each skill (the same for a quest cape and its quests). Long sections show the first
 few goals with "Show more", and finished goals move to a Completed section at the bottom.
 
+A Slayer level or XP goal shows your current task under it: the monster, kills left and a bar for how much of the task
+is done.
+
+To keep an eye on a goal while you play, right-click it in the panel and choose **Show on game screen**. It shows as a
+small icon with a short number ("73/80", "34 left") and a progress bar; hold Alt to move them, and pick the size under
+**Goals** in the plugin settings. Right-click again to take it off.
+
 Click a goal to see more:
 
 - **Skill and XP goals** open that skill's setup page in Nib Tracker. Slayer opens the gear plan for your current task's

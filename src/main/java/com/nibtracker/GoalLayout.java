@@ -23,6 +23,8 @@ final class GoalLayout
 	{
 		final GoalsPanel.Row main;
 		final List<GoalsPanel.Row> parts;
+		/* Shown under the goal but not parts of it (the current Slayer task under a Slayer goal). */
+		final List<GoalsPanel.Row> extras = new ArrayList<>();
 
 		Group(GoalsPanel.Row main, List<GoalsPanel.Row> parts)
 		{
@@ -82,7 +84,11 @@ final class GoalLayout
 		Map<String, Group> groups = new LinkedHashMap<>();
 		for (GoalsPanel.Row r : rows)
 		{
-			// A part whose main goal isn't in the list stands on its own.
+			// A part whose main goal isn't in the list stands on its own; an extra without its goal isn't shown.
+			if (r.extra)
+			{
+				continue;
+			}
 			if (r.parent.isEmpty() || !byId.containsKey(r.parent) || r.parent.equals(r.id))
 			{
 				groups.put(r.id, new Group(r, new ArrayList<>()));
@@ -91,7 +97,11 @@ final class GoalLayout
 		for (GoalsPanel.Row r : rows)
 		{
 			Group g = r.parent.isEmpty() ? null : groups.get(r.parent);
-			if (g != null && !groups.containsKey(r.id))
+			if (g != null && r.extra)
+			{
+				g.extras.add(r);
+			}
+			else if (g != null && !groups.containsKey(r.id))
 			{
 				g.parts.add(r);
 			}

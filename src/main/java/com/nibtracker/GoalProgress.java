@@ -381,4 +381,19 @@ final class GoalProgress
 		JsonElement v = a.get(i);
 		return v != null && v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber() ? v.getAsDouble() : 0;
 	}
+
+	/** A goal's value in a few characters, for the game screen: "73/80", "34 left", or a percentage when it's longer. */
+	static String shortText(String detail, double progress, boolean done)
+	{
+		if (done)
+		{
+			return "Done";
+		}
+		String d = detail == null ? "" : detail.replace(" / ", "/").trim();
+		if (d.length() <= 12)
+		{
+			return d.isEmpty() && progress >= 0 ? Math.round(progress * 100) + "%" : d;
+		}
+		return progress >= 0 ? Math.round(progress * 100) + "%" : d.substring(0, 10) + "..";
+	}
 }

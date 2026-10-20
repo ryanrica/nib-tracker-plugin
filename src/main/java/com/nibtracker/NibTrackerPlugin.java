@@ -46,6 +46,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.loottracker.LootReceived;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.Text;
 
@@ -118,6 +119,12 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	@Inject
 	private ClientToolbar clientToolbar;
 
+	@Inject
+	private OverlayManager overlayManager;
+
+	@Inject
+	private GoalOverlay goalOverlay;
+
 	private NavigationButton goalsButton;
 
 	/** An event waiting to be sent, with the character and profile it belongs to. */
@@ -183,6 +190,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			.panel(panel)
 			.build();
 		clientToolbar.addNavigation(goalsButton);
+		overlayManager.add(goalOverlay);
 		ticker = executor.scheduleWithFixedDelay(this::tick, 2, 1, TimeUnit.SECONDS);
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
@@ -199,6 +207,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			ticker = null;
 		}
 		clientToolbar.removeNavigation(goalsButton);
+		overlayManager.remove(goalOverlay);
 		goalsButton = null;
 		for (Object t : trackers())
 		{

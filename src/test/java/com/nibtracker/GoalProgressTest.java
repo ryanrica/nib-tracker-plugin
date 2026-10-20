@@ -205,4 +205,14 @@ public class GoalProgressTest
 		assertEquals("b", part.parent);
 		assertEquals(0, part.partsTotal);
 	}
+
+	@Test
+	public void shortTextForTheGameScreen()
+	{
+		assertEquals("73/80", GoalProgress.shortText("73 / 80", 0.5, false));
+		assertEquals("34 left", GoalProgress.shortText("34 left", 0.6, false));
+		assertEquals("53%", GoalProgress.shortText("1,234,567 / 13.0M", 0.53, false));
+		assertEquals("40%", GoalProgress.shortText("", 0.4, false));
+		assertEquals("Done", GoalProgress.shortText("73 / 80", 1, true));
+	}
 }

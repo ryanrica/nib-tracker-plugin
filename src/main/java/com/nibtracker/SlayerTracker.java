@@ -34,6 +34,9 @@ class SlayerTracker
 	private int lastStreak = -1;
 	private int ticks;
 	private int lastSentTick = -PROGRESS_EVERY_TICKS;
+	/* The task as last read, for the Goals panel (whether or not Slayer is being sent), and a count of changes to it. */
+	private JsonObject current;
+	private int version;
 
 	void start(EventSink sink)
 	{
@@ -50,6 +53,20 @@ class SlayerTracker
 	void reset()
 	{
 		dirty = false;
+		current = null;
+		version++;
+	}
+
+	/** Client thread. The current task ({ name, remaining, amount, location }), or null before it's been read. */
+	JsonObject current()
+	{
+		return current;
+	}
+
+	/** Goes up whenever the current task changes, so the Goals panel knows to update. */
+	int version()
+	{
+		return version;
 	}
 
 	@Subscribe
@@ -71,11 +88,21 @@ class SlayerTracker
 	void tick()
 	{
 		ticks++;
-		if (!dirty || sink == null || !sink.active() || !sink.allowed("slayer", config.sendSlayer()))
+		if (!dirty || sink == null || !sink.active())
 		{
 			return;
 		}
 		JsonObject now = read();
+		if (!now.equals(current))
+		{
+			current = now;
+			version++;
+		}
+		if (!sink.allowed("slayer", config.sendSlayer()))
+		{
+			dirty = false;
+			return;
+		}
 		int streak = client.getVarbitValue(VarbitID.SLAYER_TASKS_COMPLETED);
 		if (lastStreak >= 0 && streak > lastStreak)
 		{
