@@ -27,6 +27,8 @@ final class Routines
 		final String cadence;
 		final int every;
 		final long dueAt;
+		/* What to do or collect, from Nib Tracker, or empty. */
+		String how = "";
 
 		Daily(String id, String label, String cadence, int every, long dueAt)
 		{
@@ -48,6 +50,9 @@ final class Routines
 		final int itemId;
 		final long readyAt;
 		final boolean ready;
+		/* The best way there with what's in your bank, and how to use it, from Nib Tracker; empty when unknown. */
+		String travel = "";
+		String travelHow = "";
 
 		Patch(String region, String name, String type, String crop, int itemId, long readyAt, boolean ready)
 		{
@@ -74,7 +79,9 @@ final class Routines
 			String id = str(o, "id"), label = str(o, "label"), cadence = str(o, "cadence");
 			if (!id.isEmpty() && !label.isEmpty())
 			{
-				out.add(new Daily(id, label, cadence, (int) Math.max(1, num(o, "every")), (long) num(o, "dueAt")));
+				Daily d = new Daily(id, label, cadence, (int) Math.max(1, num(o, "every")), (long) num(o, "dueAt"));
+				d.how = str(o, "how");
+				out.add(d);
 			}
 		}
 		return out;
@@ -88,8 +95,11 @@ final class Routines
 			String region = str(o, "region");
 			if (!region.isEmpty())
 			{
-				out.add(new Patch(region, str(o, "name"), str(o, "type"), str(o, "crop"), (int) num(o, "itemId"), (long) num(o, "readyAt"),
-					o.has("ready") && o.get("ready").isJsonPrimitive() && o.get("ready").getAsBoolean()));
+				Patch p = new Patch(region, str(o, "name"), str(o, "type"), str(o, "crop"), (int) num(o, "itemId"), (long) num(o, "readyAt"),
+					o.has("ready") && o.get("ready").isJsonPrimitive() && o.get("ready").getAsBoolean());
+				p.travel = str(o, "travel");
+				p.travelHow = str(o, "travelHow");
+				out.add(p);
 			}
 		}
 		return out;

@@ -40,6 +40,8 @@ final class GoalProgress
 		final int points;
 		/* One line on what the goal is, from the web app (e.g. a combat achievement's task), or empty. */
 		final String info;
+		/* How to get there (for goals tied to a boss or monster), from the web app, or empty. */
+		String travel = "";
 		/* The main goal this one is part of (Base 80 for 80 Smithing), or empty. */
 		String parent = "";
 		/* For a main goal: how many of its parts the web app counts as done, and how many there are. */
@@ -173,6 +175,7 @@ final class GoalProgress
 				number(o, "target", -1), number(o, "current", -1), number(o, "progress", -1),
 				o.has("done") && o.get("done").isJsonPrimitive() && o.get("done").getAsBoolean(), (int) number(o, "points", 0), text(o, "info"));
 			goal.parent = text(o, "parent");
+			goal.travel = text(o, "travel");
 			JsonElement parts = o.get("parts");
 			if (parts != null && parts.isJsonArray() && parts.getAsJsonArray().size() == 2)
 			{

@@ -6,13 +6,16 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridLayout;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -40,6 +43,8 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
+import net.runelite.client.ui.components.materialtabs.MaterialTab;
+import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
 import net.runelite.client.util.AsyncBufferedImage;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.LinkBrowser;
@@ -75,6 +80,11 @@ class GoalsPanel extends PluginPanel
 		/* Shown under its goal but not a part of it (the current Slayer task); and whether it's shown on the game screen. */
 		boolean extra;
 		boolean pinned;
+		/* What the view's sub-filter matches (a combat achievement or diary tier, a quest's state), or empty. */
+		String tag = "";
+		/* A one-line description (a combat achievement's task) and how to get there, for the game screen's hover text. */
+		String info = "";
+		String travel = "";
 
 		Row(String id, String category, String title, String detail, String hint, double progress, boolean done, int points,
 			Skill skill, String item, int fallbackItem, String link)
@@ -99,6 +109,11 @@ class GoalsPanel extends PluginPanel
 	private static final String COMPLETED = "Completed";
 	private static final String DAILIES = "Daily tasks";
 	private static final String FARMING = "Farming";
+	private static final String OVERVIEW = "Overview";
+	private static final String ALL = "All";
+	/* Sub-filter values in the order they're offered. */
+	private static final List<String> TAG_ORDER = Arrays.asList("Easy", "Medium", "Hard", "Elite", "Master", "Grandmaster", "Not started", "In progress");
+	private static final BufferedImage LOGO = ImageUtil.loadImageResource(GoalsPanel.class, "goals_icon.png");
 	/* How far a main goal's parts are indented under it. */
 	private static final int PART_INDENT = 14;
 
@@ -111,7 +126,7 @@ class GoalsPanel extends PluginPanel
 	private static final Color HEADING = new Color(0xD8, 0xB6, 0x6A);
 	private static final int ICON = 28;
 	/* The text column beside the icon in the side panel, in pixels. */
-	private static final int HINT_WIDTH = PluginPanel.PANEL_WIDTH - 82;
+	private static final int HINT_WIDTH = PluginPanel.PANEL_WIDTH - 92;
 
 	private final ItemManager itemManager;
 	private final SkillIconManager skillIcons;
@@ -125,6 +140,12 @@ class GoalsPanel extends PluginPanel
 	/* Called with a daily task's id when it's ticked off, and with a region when it's shown or hidden. */
 	private Consumer<String> onDailyDone = id -> { };
 	private Consumer<String> onRegion = region -> { };
+	/* The view picked in the tabs, each view's sub-filter, and whether the tabs are being rebuilt (so selecting doesn't redraw). */
+	private String view = OVERVIEW;
+	private final Map<String, String> filter = new HashMap<>();
+	private boolean building;
+	private final JPanel tabsHolder = new JPanel(new BorderLayout());
+	private final JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
 
 	private final JLabel heading = new JLabel("Goals");
 	private final JLabel summary = new JLabel();
@@ -156,6 +177,8 @@ class GoalsPanel extends PluginPanel
 		top.add(heading);
 		top.add(summary);
 		top.add(overall);
+		top.add(tabsHolder);
+		top.add(filters);
 		top.add(status);
 		add(top, BorderLayout.NORTH);
 		add(list, BorderLayout.CENTER);
@@ -182,16 +205,61 @@ class GoalsPanel extends PluginPanel
 		overall.set(avg, total > 0 && done == total);
 		overall.setVisible(total > 0);
 
-		list.removeAll();
-		for (Map.Entry<String, List<GoalLayout.Group>> s : layout.sections.entrySet())
+		// The views there's something to show in: Overview, each kind of goal, Daily tasks, Farming.
+		List<String> views = new ArrayList<>();
+		views.add(OVERVIEW);
+		for (String c : GoalProgress.CATEGORIES)
 		{
-			section(s.getKey(), s.getValue());
+			if (layout.sections.containsKey(c) || layout.completed.stream().anyMatch(g -> c.equals(g.main.category)))
+			{
+				views.add(c);
+			}
 		}
-		dailies(extras);
-		farming(extras);
-		if (!layout.completed.isEmpty())
+		if (extras.dailiesOn && !extras.dailies.isEmpty())
 		{
-			section(COMPLETED, layout.completed);
+			views.add(DAILIES);
+		}
+		if (extras.farmOn && !extras.allRegions.isEmpty())
+		{
+			views.add(FARMING);
+		}
+		if (!views.contains(view))
+		{
+			view = OVERVIEW;
+		}
+		tabs(views);
+
+		list.removeAll();
+		if (OVERVIEW.equals(view))
+		{
+			filters.setVisible(false);
+			for (Map.Entry<String, List<GoalLayout.Group>> s : layout.sections.entrySet())
+			{
+				section(s.getKey(), s.getValue());
+			}
+			dailies(extras, true);
+			farming(extras, true);
+			if (!layout.completed.isEmpty())
+			{
+				section(COMPLETED, layout.completed);
+			}
+		}
+		else if (DAILIES.equals(view))
+		{
+			filters(Arrays.asList(ALL, "Due", "Done"));
+			dailies(extras, false);
+		}
+		else if (FARMING.equals(view))
+		{
+			List<String> types = new ArrayList<>();
+			types.add(ALL);
+			extras.patches.stream().map(p -> p.type).filter(t -> !t.isEmpty()).distinct().sorted().forEach(types::add);
+			filters(types);
+			farming(extras, false);
+		}
+		else
+		{
+			categoryView(view, layout);
 		}
 		list.revalidate();
 		list.repaint();
@@ -202,6 +270,170 @@ class GoalsPanel extends PluginPanel
 		show(lastTitle, lastMessage, lastRows, lastExtras);
 	}
 
+	/** The icon tabs along the top, as RuneLite's Time Tracking has: Overview, then each kind of goal there is. */
+	private void tabs(List<String> views)
+	{
+		tabsHolder.removeAll();
+		MaterialTabGroup group = new MaterialTabGroup();
+		group.setLayout(new GridLayout(0, 6, 4, 4));
+		MaterialTab selected = null;
+		for (String v : views)
+		{
+			MaterialTab tab = new MaterialTab("", group, null);
+			tabIcon(v, tab);
+			tab.setToolTipText(v);
+			tab.setPreferredSize(new Dimension(30, 30));
+			tab.setOnSelectEvent(() -> {
+				if (!building && !v.equals(view))
+				{
+					view = v;
+					SwingUtilities.invokeLater(this::redraw);
+				}
+				return true;
+			});
+			group.addTab(tab);
+			if (v.equals(view))
+			{
+				selected = tab;
+			}
+		}
+		building = true;
+		if (selected != null)
+		{
+			group.select(selected);
+		}
+		building = false;
+		tabsHolder.add(group, BorderLayout.CENTER);
+		tabsHolder.revalidate();
+	}
+
+	private void tabIcon(String v, MaterialTab tab)
+	{
+		if (OVERVIEW.equals(v))
+		{
+			tab.setIcon(new ImageIcon(fitTo(LOGO, 22)));
+			return;
+		}
+		if (DAILIES.equals(v))
+		{
+			tab.setIcon(new ImageIcon(fitTo(GoalTracker.calendarIcon(), 22)));
+			return;
+		}
+		Skill skill = FARMING.equals(v) ? Skill.FARMING : "Bosses".equals(v) ? Skill.SLAYER : "Combat achievements".equals(v) ? Skill.ATTACK : null;
+		if (skill != null)
+		{
+			tab.setIcon(new ImageIcon(fitTo(skillIcons.getSkillImage(skill, false), 22)));
+			return;
+		}
+		int item = "Skills".equals(v) ? ItemID.SKILLCAPE_MAX : fallbackItem(v);
+		if (item > 0 && itemManager != null)
+		{
+			AsyncBufferedImage img = itemManager.getImage(item);
+			img.onLoaded(() -> tab.setIcon(new ImageIcon(fitTo(img, 24))));
+		}
+		else
+		{
+			tab.setIcon(new ImageIcon(fitTo(LOGO, 22)));
+		}
+	}
+
+	/** The sub-filters for the current view (tiers, quest state, patch type...), as small clickable chips. */
+	private void filters(List<String> options)
+	{
+		filters.removeAll();
+		String current = filter.getOrDefault(view, ALL);
+		if (!options.contains(current))
+		{
+			current = ALL;
+			filter.remove(view);
+		}
+		if (options.size() <= 1)
+		{
+			filters.setVisible(false);
+			return;
+		}
+		for (String o : options)
+		{
+			boolean on = o.equals(current);
+			JLabel chip = new JLabel(o);
+			chip.setFont(FontManager.getRunescapeSmallFont());
+			chip.setForeground(on ? Color.WHITE : MUTED);
+			chip.setOpaque(true);
+			chip.setBackground(on ? ColorScheme.BRAND_ORANGE.darker() : ColorScheme.DARKER_GRAY_COLOR);
+			chip.setBorder(new EmptyBorder(2, 6, 2, 6));
+			chip.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			chip.addMouseListener(new MouseAdapter()
+			{
+				@Override
+				public void mouseClicked(MouseEvent e)
+				{
+					filter.put(view, o);
+					redraw();
+				}
+			});
+			filters.add(chip);
+		}
+		filters.setVisible(true);
+		filters.revalidate();
+	}
+
+	private String currentFilter()
+	{
+		return filter.getOrDefault(view, ALL);
+	}
+
+	/** One kind of goal on its own: all of them (no "Show more"), filtered by tier or state where that applies. */
+	private void categoryView(String category, GoalLayout.Layout layout)
+	{
+		List<GoalLayout.Group> open = layout.sections.getOrDefault(category, Collections.emptyList());
+		List<GoalLayout.Group> finished = new ArrayList<>();
+		for (GoalLayout.Group g : layout.completed)
+		{
+			if (category.equals(g.main.category))
+			{
+				finished.add(g);
+			}
+		}
+		List<String> tags = new ArrayList<>();
+		tags.add(ALL);
+		for (String t : TAG_ORDER)
+		{
+			if (open.stream().anyMatch(g -> t.equals(g.main.tag)) || finished.stream().anyMatch(g -> t.equals(g.main.tag)))
+			{
+				tags.add(t);
+			}
+		}
+		filters(tags);
+		String f = currentFilter();
+		for (GoalLayout.Group g : open)
+		{
+			if (ALL.equals(f) || f.equals(g.main.tag))
+			{
+				group(g);
+			}
+		}
+		List<GoalLayout.Group> shownDone = new ArrayList<>();
+		for (GoalLayout.Group g : finished)
+		{
+			if (ALL.equals(f) || f.equals(g.main.tag))
+			{
+				shownDone.add(g);
+			}
+		}
+		if (!shownDone.isEmpty())
+		{
+			list.add(sectionHeader(COMPLETED, shownDone.size()));
+			if (!collapsed.contains(COMPLETED))
+			{
+				shownDone.forEach(this::group);
+			}
+		}
+		if (open.isEmpty() && shownDone.isEmpty())
+		{
+			list.add(note("Nothing here yet."));
+		}
+	}
+
 	/** Daily tasks and farm timers for the panel, worked out by GoalTracker. */
 	static final class Extras
 	{
@@ -209,14 +441,55 @@ class GoalsPanel extends PluginPanel
 		boolean farmOn;
 		boolean dailiesPinned;
 		boolean farmPinned;
-		/* Each daily task: id, label, whether it's due, and its status ("Due", "Resets in 5h 12m"). */
-		final List<String[]> dailies = new ArrayList<>();
-		final List<Boolean> dailyDue = new ArrayList<>();
-		/* Regions in order (soonest first), each with its summary line and its patches. */
+		final List<DailyView> dailies = new ArrayList<>();
+		/* Regions in order (soonest first) with their patches, and every visible patch on its own for the type filter. */
 		final List<Region> regions = new ArrayList<>();
+		final List<PatchView> patches = new ArrayList<>();
 		/* Every region with a timer, shown or not, for the show/hide menu. */
 		final List<String> allRegions = new ArrayList<>();
 		final Set<String> hiddenRegions = new HashSet<>();
+	}
+
+	static final class DailyView
+	{
+		final String id;
+		final String label;
+		final String status;
+		final String how;
+		final boolean due;
+
+		DailyView(String id, String label, String status, String how, boolean due)
+		{
+			this.id = id;
+			this.label = label;
+			this.status = status;
+			this.how = how;
+			this.due = due;
+		}
+	}
+
+	static final class PatchView
+	{
+		final String region;
+		final String crop;
+		final String type;
+		final String status;
+		final String travel;
+		final String travelHow;
+		final boolean ready;
+		final int itemId;
+
+		PatchView(String region, String crop, String type, String status, String travel, String travelHow, boolean ready, int itemId)
+		{
+			this.region = region;
+			this.crop = crop;
+			this.type = type;
+			this.status = status;
+			this.travel = travel;
+			this.travelHow = travelHow;
+			this.ready = ready;
+			this.itemId = itemId;
+		}
 	}
 
 	static final class Region
@@ -224,10 +497,7 @@ class GoalsPanel extends PluginPanel
 		final String name;
 		final String summary;
 		final boolean anyReady;
-		/* Each patch: label ("Ranarr (Herb)"), status ("Ready", "34m"), whether it's ready, its item id for the icon. */
-		final List<String[]> patches = new ArrayList<>();
-		final List<Boolean> ready = new ArrayList<>();
-		final List<Integer> items = new ArrayList<>();
+		final List<PatchView> patches = new ArrayList<>();
 
 		Region(String name, String summary, boolean anyReady)
 		{
@@ -237,61 +507,92 @@ class GoalsPanel extends PluginPanel
 		}
 	}
 
-	/** Daily tasks: due ones first, each with its status; right-click to tick one off or put the count on screen. */
-	private void dailies(Extras x)
+	/** Daily tasks: due ones first, each with its status; right-click to tick one off or put them on screen. */
+	private void dailies(Extras x, boolean overview)
 	{
 		if (!x.dailiesOn || x.dailies.isEmpty())
 		{
 			return;
 		}
-		long due = x.dailyDue.stream().filter(b -> b).count();
-		JComponent header = sectionHeader(DAILIES, (int) due);
-		JPopupMenu menu = new JPopupMenu();
-		menu.add(item(x.dailiesPinned ? "Remove daily tasks from game screen" : "Show daily tasks on game screen", () -> onPin.accept(GoalTracker.DAILIES)));
-		header.setComponentPopupMenu(menu);
-		inheritMenu(header);
-		list.add(header);
-		if (collapsed.contains(DAILIES))
+		String f = overview ? ALL : currentFilter();
+		if (overview)
 		{
-			return;
-		}
-		for (int i = 0; i < x.dailies.size(); i++)
-		{
-			String[] d = x.dailies.get(i);
-			boolean isDue = x.dailyDue.get(i);
-			JComponent line = line(null, d[1], d[2], isDue ? AMBER : DONE, 0);
-			JPopupMenu m = new JPopupMenu();
-			if (isDue)
+			JComponent header = sectionHeader(DAILIES, (int) x.dailies.stream().filter(d -> d.due).count());
+			header.setComponentPopupMenu(dailiesMenu(x, null));
+			inheritMenu(header);
+			list.add(header);
+			if (collapsed.contains(DAILIES))
 			{
-				m.add(item("Mark done", () -> onDailyDone.accept(d[0])));
+				return;
 			}
-			m.add(item(x.dailiesPinned ? "Remove daily tasks from game screen" : "Show daily tasks on game screen", () -> onPin.accept(GoalTracker.DAILIES)));
-			line.setComponentPopupMenu(m);
+		}
+		for (DailyView d : x.dailies)
+		{
+			if ("Due".equals(f) && !d.due || "Done".equals(f) && d.due)
+			{
+				continue;
+			}
+			JComponent line = line(null, d.label, d.status, overview || d.how.isEmpty() ? null : d.how, d.due ? AMBER : DONE, 0);
+			line.setToolTipText(d.how.isEmpty() ? null : "<html>" + escape(d.label) + "<br>" + escape(d.how) + "</html>");
+			line.setComponentPopupMenu(dailiesMenu(x, d));
 			inheritMenu(line);
 			list.add(line);
 		}
 	}
 
-	/** Farm timers by region, soonest first: each region folds open to its patches. Right-click to hide a region. */
-	private void farming(Extras x)
+	private JPopupMenu dailiesMenu(Extras x, DailyView d)
+	{
+		JPopupMenu m = new JPopupMenu();
+		if (d != null && d.due)
+		{
+			m.add(item("Mark done", () -> onDailyDone.accept(d.id)));
+		}
+		m.add(item(x.dailiesPinned ? "Remove daily tasks from game screen" : "Show daily tasks on game screen", () -> onPin.accept(GoalTracker.DAILIES)));
+		return m;
+	}
+
+	/**
+	 * Farm timers. Overview and "All": by region, soonest first, each folding open to its patches. A patch type (Herb...):
+	 * every patch of that type, soonest first, with its region and the best way there with what's in your bank.
+	 */
+	private void farming(Extras x, boolean overview)
 	{
 		if (!x.farmOn || x.allRegions.isEmpty())
 		{
 			return;
 		}
-		JComponent header = sectionHeader(FARMING, x.regions.size());
-		header.setComponentPopupMenu(regionsMenu(x));
-		inheritMenu(header);
-		list.add(header);
-		if (collapsed.contains(FARMING))
+		if (overview)
 		{
+			JComponent header = sectionHeader(FARMING, x.regions.size());
+			header.setComponentPopupMenu(regionsMenu(x));
+			inheritMenu(header);
+			list.add(header);
+			if (collapsed.contains(FARMING))
+			{
+				return;
+			}
+		}
+		String f = overview ? ALL : currentFilter();
+		if (!ALL.equals(f))
+		{
+			for (PatchView p : x.patches)
+			{
+				if (f.equals(p.type))
+				{
+					JComponent line = line(p.itemId, p.region + "  ·  " + p.crop, p.status, p.travel.isEmpty() ? null : p.travel, p.ready ? DONE : AMBER, 0);
+					line.setToolTipText(p.travelHow.isEmpty() ? null : "<html>" + escape(p.travel) + "<br>" + escape(p.travelHow) + "</html>");
+					line.setComponentPopupMenu(regionsMenu(x));
+					inheritMenu(line);
+					list.add(line);
+				}
+			}
 			return;
 		}
 		for (Region r : x.regions)
 		{
 			String key = "farm:" + r.name;
 			boolean open = expanded.contains(key);
-			JComponent row = line(null, (open ? "– " : "+ ") + r.name, r.summary, r.anyReady ? DONE : AMBER, 0);
+			JComponent row = line(null, (open ? "– " : "+ ") + r.name, r.summary, null, r.anyReady ? DONE : AMBER, 0);
 			row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 			row.addMouseListener(new MouseAdapter()
 			{
@@ -315,10 +616,18 @@ class GoalsPanel extends PluginPanel
 			list.add(row);
 			if (open)
 			{
-				for (int i = 0; i < r.patches.size(); i++)
+				String travel = r.patches.stream().map(p -> p.travel).filter(t -> !t.isEmpty()).findFirst().orElse("");
+				for (PatchView p : r.patches)
 				{
-					String[] p = r.patches.get(i);
-					list.add(line(r.items.get(i), p[0], p[1], r.ready.get(i) ? DONE : AMBER, PART_INDENT));
+					list.add(line(p.itemId, p.crop + (p.type.isEmpty() ? "" : " (" + p.type + ")"), p.status, null, p.ready ? DONE : AMBER, PART_INDENT));
+				}
+				if (!travel.isEmpty())
+				{
+					JLabel t = new JLabel("Get there: " + travel);
+					t.setFont(FontManager.getRunescapeSmallFont());
+					t.setForeground(MUTED);
+					t.setBorder(new EmptyBorder(0, PART_INDENT + 4, 2, 0));
+					list.add(t);
 				}
 			}
 		}
@@ -346,8 +655,17 @@ class GoalsPanel extends PluginPanel
 		return i;
 	}
 
-	/** A one-line row: optional item icon, a label, a status on the right, and a coloured edge. */
-	private JComponent line(Integer itemId, String label, String status, Color edge, int indent)
+	private static JLabel note(String text)
+	{
+		JLabel l = new JLabel(text);
+		l.setFont(FontManager.getRunescapeSmallFont());
+		l.setForeground(MUTED);
+		l.setBorder(new EmptyBorder(4, 2, 4, 2));
+		return l;
+	}
+
+	/** A compact row: optional item icon, a label, a status on the right, an optional muted line under it, a coloured edge. */
+	private JComponent line(Integer itemId, String label, String status, String sub, Color edge, int indent)
 	{
 		JPanel p = new JPanel(new BorderLayout(6, 0));
 		p.setBackground(ColorScheme.DARKER_GRAY_COLOR);
@@ -360,14 +678,27 @@ class GoalsPanel extends PluginPanel
 			img.onLoaded(() -> icon.setIcon(new ImageIcon(ImageUtil.resizeImage(img, 18, 16, true))));
 			p.add(icon, BorderLayout.WEST);
 		}
+		JPanel text = new JPanel(new DynamicGridLayout(0, 1, 0, 2));
+		text.setOpaque(false);
+		JPanel top = new JPanel(new BorderLayout(6, 0));
+		top.setOpaque(false);
 		JLabel l = new JLabel(label);
 		l.setFont(FontManager.getRunescapeSmallFont());
 		l.setForeground(Color.WHITE);
 		JLabel s = new JLabel(status);
 		s.setFont(FontManager.getRunescapeSmallFont());
 		s.setForeground(edge == DONE ? DONE : MUTED);
-		p.add(l, BorderLayout.CENTER);
-		p.add(s, BorderLayout.EAST);
+		top.add(l, BorderLayout.CENTER);
+		top.add(s, BorderLayout.EAST);
+		text.add(top);
+		if (sub != null && !sub.isEmpty())
+		{
+			JLabel u = new JLabel("<html><div style='width:" + (HINT_WIDTH - indent) + "px'>" + escape(sub) + "</div></html>");
+			u.setFont(FontManager.getRunescapeSmallFont());
+			u.setForeground(MUTED);
+			text.add(u);
+		}
+		p.add(text, BorderLayout.CENTER);
 		if (indent == 0)
 		{
 			return p;
@@ -661,6 +992,17 @@ class GoalsPanel extends PluginPanel
 				inheritMenu((Container) k);
 			}
 		}
+	}
+
+	/** An image scaled to fit a square of this size, keeping its shape. */
+	private static BufferedImage fitTo(BufferedImage img, int size)
+	{
+		if (img == null)
+		{
+			return new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+		}
+		double s = Math.min((double) size / img.getWidth(), (double) size / img.getHeight());
+		return ImageUtil.resizeImage(img, Math.max(1, (int) Math.round(img.getWidth() * s)), Math.max(1, (int) Math.round(img.getHeight() * s)));
 	}
 
 	private static BufferedImage fit(BufferedImage img)

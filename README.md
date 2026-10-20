@@ -34,10 +34,20 @@ first, with a timer for each; click a region to open it, and right-click to choo
 folded away, or turned off under **Goals** in the plugin settings. Farm timers come from RuneLite's Time Tracking plugin
 through Nib Tracker, so new plantings show up once the Nib Tracker site has caught up.
 
+The icons along the top of the panel switch between the **Overview** (everything) and one kind at a time: skills,
+quests, bosses, collection log, items, achievement diaries, combat achievements, daily tasks and farming. Each has its
+own filters: combat achievements and diaries by tier, quests by whether you've started them, daily tasks by due or done,
+and farming by patch type (herbs, say), which lists every patch of that type with its region and the best way there
+with what's in your bank.
+
 To keep an eye on a goal while you play, right-click it in the panel and choose **Show on game screen**. Daily tasks
-(how many are due) and farming (how many patches are ready, or the time to the next) can go on screen the same way. It shows as a
-small icon with a short number ("73/80", "34 left") and a progress bar; hold Alt to move them, and pick the size under
+(how many are due) and farming (how many patches are ready, or the time to the next) can go on screen the same way. It
+shows as a small icon with a short number ("73/80", "34 left") and a bar along the bottom; hover over it for the details
+(what's left, a combat achievement's task, the daily tasks to do, how to get there). Finished goals, and daily tasks once
+they're all done, leave the screen by themselves, so you can leave it on. Hold Alt to move them, and pick the size under
 **Goals** in the plugin settings. Right-click again to take it off.
+
+Finished daily tasks get the same pop-up and chat message as goals.
 
 Click a goal to see more:
 

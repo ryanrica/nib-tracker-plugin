@@ -41,6 +41,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
+import net.runelite.client.util.ColorUtil;
 import net.runelite.client.util.Text;
 import net.runelite.http.api.item.ItemPrice;
 
@@ -92,8 +93,12 @@ class GoalTracker
 	private List<Routines.Daily> dailies = Collections.emptyList();
 	private List<Routines.Patch> farm = Collections.emptyList();
 	private final Map<String, Long> tickedOff = new HashMap<>();
+	/* Whether each daily task was due when last looked at, so one getting done can have a pop-up. */
+	private final Map<String, Boolean> dailyWasDue = new HashMap<>();
+	/* Titles in on-screen hover text. */
+	private static final Color TIP_TITLE = new Color(0xFF, 0x98, 0x1F);
 	private long lastMinute;
-	private BufferedImage dailyIcon;
+	private static BufferedImage calendar;
 
 	private EventSink sink;
 	private int slayerSeen = -1;
@@ -314,9 +319,10 @@ class GoalTracker
 		for (GoalsPanel.Row r : rows)
 		{
 			r.pinned = pins.contains(r.id);
-			if (r.pinned)
+			// Finished goals leave the screen by themselves, so it only shows what's still to do.
+			if (r.pinned && !r.done)
 			{
-				onScreen.add(new GoalOverlay.Entry(overlayIcon(r), GoalProgress.shortText(r.detail, r.progress, r.done), r.progress, r.done));
+				onScreen.add(new GoalOverlay.Entry(overlayIcon(r), GoalProgress.shortText(r.detail, r.progress, false), r.progress, false, tooltip(r, r.info, r.travel)));
 			}
 		}
 		long now = System.currentTimeMillis();
@@ -386,18 +392,36 @@ class GoalTracker
 			dueAt.put(d.id, Math.max(d.dueAt, mine == null ? 0 : mine));
 		}
 		sorted.sort(Comparator.comparing((Routines.Daily d) -> dueAt.get(d.id) > now).thenComparing(d -> d.label));
-		int due = 0;
+		List<Routines.Daily> dueNow = new ArrayList<>();
 		for (Routines.Daily d : sorted)
 		{
 			long at = dueAt.get(d.id);
 			boolean isDue = at <= now;
-			due += isDue ? 1 : 0;
-			x.dailies.add(new String[]{d.id, d.label, isDue ? "Due" : "Resets in " + Routines.left(at - now)});
-			x.dailyDue.add(isDue);
+			// A task seen due this session that's now done (ticked here, or in Nib Tracker) gets a pop-up.
+			Boolean before = dailyWasDue.put(d.id, isDue);
+			if (Boolean.TRUE.equals(before) && !isDue)
+			{
+				dailyDone(d);
+			}
+			if (isDue)
+			{
+				dueNow.add(d);
+			}
+			x.dailies.add(new GoalsPanel.DailyView(d.id, d.label, isDue ? "Due" : "Resets in " + Routines.left(at - now), d.how, isDue));
 		}
-		if (x.dailiesPinned && !sorted.isEmpty())
+		// On screen only while something is due: done for the day, it goes away by itself.
+		if (x.dailiesPinned && !dueNow.isEmpty())
 		{
-			onScreen.add(new GoalOverlay.Entry(dailyIcon(), due > 0 ? due + " due" : "Done", (double) (sorted.size() - due) / sorted.size(), due == 0));
+			StringBuilder tip = new StringBuilder("Daily tasks due");
+			for (Routines.Daily d : dueNow)
+			{
+				tip.append("</br>").append(ColorUtil.wrapWithColorTag(Text.escapeJagex(d.label), TIP_TITLE));
+				if (!d.how.isEmpty())
+				{
+					tip.append("</br>").append(Text.escapeJagex(d.how));
+				}
+			}
+			onScreen.add(new GoalOverlay.Entry(calendarIcon(), dueNow.size() + " due", (double) (sorted.size() - dueNow.size()) / sorted.size(), false, tip.toString()));
 		}
 
 		Set<String> hidden = hiddenRegions();
@@ -412,35 +436,87 @@ class GoalTracker
 		List<Map.Entry<String, List<Routines.Patch>>> regions = new ArrayList<>(byRegion.entrySet());
 		regions.removeIf(e -> hidden.contains(e.getKey()));
 		regions.sort(Comparator.comparingLong(e -> soonest(e.getValue(), now)));
-		int ready = 0;
-		long next = Long.MAX_VALUE;
+		List<Routines.Patch> readyNow = new ArrayList<>();
+		Routines.Patch next = null;
 		for (Map.Entry<String, List<Routines.Patch>> e : regions)
 		{
 			List<Routines.Patch> ps = new ArrayList<>(e.getValue());
 			ps.sort(Comparator.comparingLong(p -> p.readyAt(now) ? 0 : p.readyAt > 0 ? p.readyAt : Long.MAX_VALUE));
-			boolean anyReady = ps.stream().anyMatch(p -> p.readyAt(now));
-			GoalsPanel.Region r = new GoalsPanel.Region(e.getKey(), Routines.summary(ps, now), anyReady);
+			GoalsPanel.Region r = new GoalsPanel.Region(e.getKey(), Routines.summary(ps, now), ps.stream().anyMatch(p -> p.readyAt(now)));
 			for (Routines.Patch p : ps)
 			{
 				boolean isReady = p.readyAt(now);
-				ready += isReady ? 1 : 0;
-				if (!isReady && p.readyAt > 0)
+				if (isReady)
 				{
-					next = Math.min(next, p.readyAt);
+					readyNow.add(p);
 				}
-				String where = !p.name.isEmpty() ? p.name : p.type;
-				r.patches.add(new String[]{p.crop + (where.isEmpty() ? "" : " (" + where + ")"), isReady ? "Ready" : p.readyAt > 0 ? Routines.left(p.readyAt - now) : "Growing"});
-				r.ready.add(isReady);
-				r.items.add(p.itemId);
+				else if (p.readyAt > 0 && (next == null || p.readyAt < next.readyAt))
+				{
+					next = p;
+				}
+				String crop = p.crop + (p.name.isEmpty() || p.name.equals(p.region) ? "" : " · " + p.name);
+				GoalsPanel.PatchView v = new GoalsPanel.PatchView(p.region, crop, p.type,
+					isReady ? "Ready" : p.readyAt > 0 ? Routines.left(p.readyAt - now) : "Growing", p.travel, p.travelHow, isReady, p.itemId);
+				r.patches.add(v);
+				x.patches.add(v);
 			}
 			x.regions.add(r);
 		}
+		x.patches.sort(Comparator.comparing((GoalsPanel.PatchView v) -> !v.ready).thenComparing(v -> v.status.length()).thenComparing(v -> v.status));
 		if (x.farmPinned && !regions.isEmpty())
 		{
+			StringBuilder tip = new StringBuilder(readyNow.isEmpty() ? "Farming" : "Ready to harvest");
+			for (Routines.Patch p : readyNow)
+			{
+				tip.append("</br>").append(ColorUtil.wrapWithColorTag(Text.escapeJagex(p.region), TIP_TITLE)).append(": ").append(Text.escapeJagex(p.crop))
+					.append(p.travel.isEmpty() ? "" : " (" + Text.escapeJagex(p.travel) + ")");
+			}
+			if (next != null)
+			{
+				tip.append("</br>Next: ").append(Text.escapeJagex(next.region)).append(", ").append(Text.escapeJagex(next.crop)).append(" in ").append(Routines.left(next.readyAt - now));
+			}
 			onScreen.add(new GoalOverlay.Entry(skillIcons.getSkillImage(Skill.FARMING, true),
-				ready > 0 ? ready + " ready" : next == Long.MAX_VALUE ? "Growing" : Routines.left(next - now), -1, ready > 0));
+				!readyNow.isEmpty() ? readyNow.size() + " ready" : next == null ? "Growing" : Routines.left(next.readyAt - now), -1, false, tip.toString()));
 		}
 		return x;
+	}
+
+	/** A daily task that's just been done: the same pop-up and chat line as a goal. */
+	private void dailyDone(Routines.Daily d)
+	{
+		if (config.goalChat())
+		{
+			chatMessageManager.queue(QueuedMessage.builder()
+				.type(ChatMessageType.GAMEMESSAGE)
+				.runeLiteFormattedMessage(new ChatMessageBuilder()
+					.append(ChatColorType.HIGHLIGHT).append("Nib Tracker daily task done: ")
+					.append(ChatColorType.NORMAL).append(Text.escapeJagex(d.label))
+					.build())
+				.build());
+		}
+		if (config.goalPopups())
+		{
+			popup.show("Daily task done!", "<col=ffffff>" + Text.escapeJagex(d.label) + "</col>");
+		}
+	}
+
+	/** What hovering over a goal on the game screen shows: what it is, what's left, and how to get there. */
+	private static String tooltip(GoalsPanel.Row r, String info, String travel)
+	{
+		StringBuilder t = new StringBuilder(ColorUtil.wrapWithColorTag(Text.escapeJagex(r.title), TIP_TITLE));
+		if (!info.isEmpty())
+		{
+			t.append("</br>").append(Text.escapeJagex(info));
+		}
+		if (!r.hint.isEmpty() && !r.hint.equals(info))
+		{
+			t.append("</br>").append(Text.escapeJagex(r.hint));
+		}
+		if (!travel.isEmpty())
+		{
+			t.append("</br>Get there: ").append(Text.escapeJagex(travel));
+		}
+		return t.toString();
 	}
 
 	private static long soonest(List<Routines.Patch> ps, long now)
@@ -499,10 +575,10 @@ class GoalTracker
 		return out;
 	}
 
-	/** The on-screen icon for daily tasks: a small calendar, drawn once. */
-	private BufferedImage dailyIcon()
+	/** The icon for daily tasks (panel tab and game screen): a small calendar, drawn once. */
+	static synchronized BufferedImage calendarIcon()
 	{
-		if (dailyIcon == null)
+		if (calendar == null)
 		{
 			BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
 			Graphics2D g = img.createGraphics();
@@ -520,9 +596,9 @@ class GoalTracker
 				}
 			}
 			g.dispose();
-			dailyIcon = img;
+			calendar = img;
 		}
-		return dailyIcon;
+		return calendar;
 	}
 
 	/**
@@ -628,6 +704,9 @@ class GoalTracker
 		row.serverDone = g.done;
 		row.partsDone = g.partsDone;
 		row.partsTotal = g.partsTotal;
+		row.info = g.info;
+		row.travel = g.travel;
+		row.tag = "combat_achievement".equals(g.type) || g.type.startsWith("diary") ? g.str("tier") : "quest".equals(g.type) && !r.done ? r.detail : "";
 		return row;
 	}
 
@@ -807,14 +886,18 @@ class GoalTracker
 		}
 		key.append('|').append(extras.dailiesOn).append(extras.farmOn).append(extras.dailiesPinned).append(extras.farmPinned)
 			.append(extras.hiddenRegions).append(extras.allRegions);
-		for (String[] d : extras.dailies)
+		for (GoalsPanel.DailyView d : extras.dailies)
 		{
-			key.append('|').append(String.join(",", d));
+			key.append('|').append(d.id).append(d.status);
 		}
 		for (GoalsPanel.Region r : extras.regions)
 		{
 			key.append('|').append(r.name).append(r.summary);
-			r.patches.forEach(p -> key.append(String.join(",", p)));
+			r.patches.forEach(p -> key.append(p.crop).append(p.status).append(p.travel));
+		}
+		for (GoalsPanel.Row r : rows)
+		{
+			key.append(r.tag);
 		}
 		if (key.toString().equals(shown))
 		{
