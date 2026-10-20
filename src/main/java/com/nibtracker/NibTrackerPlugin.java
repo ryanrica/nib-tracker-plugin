@@ -288,13 +288,18 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	@Subscribe
 	public void onConfigChanged(ConfigChanged e)
 	{
-		if (NibTrackerConfig.GROUP.equals(e.getGroup()) && ("syncEnabled".equals(e.getKey()) || "pluginKey".equals(e.getKey())))
+		if (!NibTrackerConfig.GROUP.equals(e.getGroup()))
+		{
+			return;
+		}
+		if ("syncEnabled".equals(e.getKey()) || "pluginKey".equals(e.getKey()))
 		{
 			linked = false;
 			helloSent = false;
 			nextHelloAt = 0;
-			goals.refresh();
 		}
+		// Any of the plugin's settings can change what the Goals panel or the game screen shows.
+		goals.refresh();
 	}
 
 	@Subscribe

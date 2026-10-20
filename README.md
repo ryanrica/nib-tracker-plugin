@@ -28,7 +28,14 @@ few goals with "Show more", and finished goals move to a Completed section at th
 A Slayer level or XP goal shows your current task under it: the monster, kills left and a bar for how much of the task
 is done.
 
-To keep an eye on a goal while you play, right-click it in the panel and choose **Show on game screen**. It shows as a
+Below your goals, **Daily tasks** lists the daily tasks you've switched on in Nib Tracker (due ones first, then how long
+until each resets); right-click one to mark it done. **Farming** lists your patches and bird houses by region, soonest
+first, with a timer for each; click a region to open it, and right-click to choose which regions to show. Both can be
+folded away, or turned off under **Goals** in the plugin settings. Farm timers come from RuneLite's Time Tracking plugin
+through Nib Tracker, so new plantings show up once the Nib Tracker site has caught up.
+
+To keep an eye on a goal while you play, right-click it in the panel and choose **Show on game screen**. Daily tasks
+(how many are due) and farming (how many patches are ready, or the time to the next) can go on screen the same way. It shows as a
 small icon with a short number ("73/80", "34 left") and a progress bar; hold Alt to move them, and pick the size under
 **Goals** in the plugin settings. Right-click again to take it off.
 

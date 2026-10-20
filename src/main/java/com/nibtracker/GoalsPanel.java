@@ -23,6 +23,7 @@ import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -96,6 +97,8 @@ class GoalsPanel extends PluginPanel
 	/* Each section shows this many goals until "Show more" is clicked. */
 	private static final int SECTION_LIMIT = 6;
 	private static final String COMPLETED = "Completed";
+	private static final String DAILIES = "Daily tasks";
+	private static final String FARMING = "Farming";
 	/* How far a main goal's parts are indented under it. */
 	private static final int PART_INDENT = 14;
 
@@ -119,6 +122,9 @@ class GoalsPanel extends PluginPanel
 	private final Set<String> expanded = new HashSet<>();
 	/* Called with a goal's id when it's put on or taken off the game screen. */
 	private Consumer<String> onPin = id -> { };
+	/* Called with a daily task's id when it's ticked off, and with a region when it's shown or hidden. */
+	private Consumer<String> onDailyDone = id -> { };
+	private Consumer<String> onRegion = region -> { };
 
 	private final JLabel heading = new JLabel("Goals");
 	private final JLabel summary = new JLabel();
@@ -129,6 +135,7 @@ class GoalsPanel extends PluginPanel
 	private String lastTitle;
 	private String lastMessage;
 	private List<Row> lastRows = new ArrayList<>();
+	private Extras lastExtras = new Extras();
 
 	GoalsPanel(ItemManager itemManager, SkillIconManager skillIcons)
 	{
@@ -152,14 +159,15 @@ class GoalsPanel extends PluginPanel
 		top.add(status);
 		add(top, BorderLayout.NORTH);
 		add(list, BorderLayout.CENTER);
-		show("Goals", "Log in with Sync to Nib Tracker on to see your goals here.", new ArrayList<>());
+		show("Goals", "Log in with Sync to Nib Tracker on to see your goals here.", new ArrayList<>(), new Extras());
 	}
 
-	void show(String title, String message, List<Row> rows)
+	void show(String title, String message, List<Row> rows, Extras extras)
 	{
 		lastTitle = title;
 		lastMessage = message;
 		lastRows = rows;
+		lastExtras = extras;
 		heading.setText(title);
 		status.setText(message == null ? "" : "<html>" + escape(message) + "</html>");
 		status.setVisible(message != null);
@@ -179,12 +187,195 @@ class GoalsPanel extends PluginPanel
 		{
 			section(s.getKey(), s.getValue());
 		}
+		dailies(extras);
+		farming(extras);
 		if (!layout.completed.isEmpty())
 		{
 			section(COMPLETED, layout.completed);
 		}
 		list.revalidate();
 		list.repaint();
+	}
+
+	private void redraw()
+	{
+		show(lastTitle, lastMessage, lastRows, lastExtras);
+	}
+
+	/** Daily tasks and farm timers for the panel, worked out by GoalTracker. */
+	static final class Extras
+	{
+		boolean dailiesOn;
+		boolean farmOn;
+		boolean dailiesPinned;
+		boolean farmPinned;
+		/* Each daily task: id, label, whether it's due, and its status ("Due", "Resets in 5h 12m"). */
+		final List<String[]> dailies = new ArrayList<>();
+		final List<Boolean> dailyDue = new ArrayList<>();
+		/* Regions in order (soonest first), each with its summary line and its patches. */
+		final List<Region> regions = new ArrayList<>();
+		/* Every region with a timer, shown or not, for the show/hide menu. */
+		final List<String> allRegions = new ArrayList<>();
+		final Set<String> hiddenRegions = new HashSet<>();
+	}
+
+	static final class Region
+	{
+		final String name;
+		final String summary;
+		final boolean anyReady;
+		/* Each patch: label ("Ranarr (Herb)"), status ("Ready", "34m"), whether it's ready, its item id for the icon. */
+		final List<String[]> patches = new ArrayList<>();
+		final List<Boolean> ready = new ArrayList<>();
+		final List<Integer> items = new ArrayList<>();
+
+		Region(String name, String summary, boolean anyReady)
+		{
+			this.name = name;
+			this.summary = summary;
+			this.anyReady = anyReady;
+		}
+	}
+
+	/** Daily tasks: due ones first, each with its status; right-click to tick one off or put the count on screen. */
+	private void dailies(Extras x)
+	{
+		if (!x.dailiesOn || x.dailies.isEmpty())
+		{
+			return;
+		}
+		long due = x.dailyDue.stream().filter(b -> b).count();
+		JComponent header = sectionHeader(DAILIES, (int) due);
+		JPopupMenu menu = new JPopupMenu();
+		menu.add(item(x.dailiesPinned ? "Remove daily tasks from game screen" : "Show daily tasks on game screen", () -> onPin.accept(GoalTracker.DAILIES)));
+		header.setComponentPopupMenu(menu);
+		inheritMenu(header);
+		list.add(header);
+		if (collapsed.contains(DAILIES))
+		{
+			return;
+		}
+		for (int i = 0; i < x.dailies.size(); i++)
+		{
+			String[] d = x.dailies.get(i);
+			boolean isDue = x.dailyDue.get(i);
+			JComponent line = line(null, d[1], d[2], isDue ? AMBER : DONE, 0);
+			JPopupMenu m = new JPopupMenu();
+			if (isDue)
+			{
+				m.add(item("Mark done", () -> onDailyDone.accept(d[0])));
+			}
+			m.add(item(x.dailiesPinned ? "Remove daily tasks from game screen" : "Show daily tasks on game screen", () -> onPin.accept(GoalTracker.DAILIES)));
+			line.setComponentPopupMenu(m);
+			inheritMenu(line);
+			list.add(line);
+		}
+	}
+
+	/** Farm timers by region, soonest first: each region folds open to its patches. Right-click to hide a region. */
+	private void farming(Extras x)
+	{
+		if (!x.farmOn || x.allRegions.isEmpty())
+		{
+			return;
+		}
+		JComponent header = sectionHeader(FARMING, x.regions.size());
+		header.setComponentPopupMenu(regionsMenu(x));
+		inheritMenu(header);
+		list.add(header);
+		if (collapsed.contains(FARMING))
+		{
+			return;
+		}
+		for (Region r : x.regions)
+		{
+			String key = "farm:" + r.name;
+			boolean open = expanded.contains(key);
+			JComponent row = line(null, (open ? "– " : "+ ") + r.name, r.summary, r.anyReady ? DONE : AMBER, 0);
+			row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			row.addMouseListener(new MouseAdapter()
+			{
+				@Override
+				public void mouseClicked(MouseEvent e)
+				{
+					if (SwingUtilities.isLeftMouseButton(e))
+					{
+						if (!expanded.remove(key))
+						{
+							expanded.add(key);
+						}
+						redraw();
+					}
+				}
+			});
+			JPopupMenu m = regionsMenu(x);
+			m.insert(item("Hide " + r.name, () -> onRegion.accept(r.name)), 0);
+			row.setComponentPopupMenu(m);
+			inheritMenu(row);
+			list.add(row);
+			if (open)
+			{
+				for (int i = 0; i < r.patches.size(); i++)
+				{
+					String[] p = r.patches.get(i);
+					list.add(line(r.items.get(i), p[0], p[1], r.ready.get(i) ? DONE : AMBER, PART_INDENT));
+				}
+			}
+		}
+	}
+
+	/** Right-click on Farming: tick the regions to show, and put farming on the game screen. */
+	private JPopupMenu regionsMenu(Extras x)
+	{
+		JPopupMenu m = new JPopupMenu();
+		m.add(item(x.farmPinned ? "Remove farming from game screen" : "Show farming on game screen", () -> onPin.accept(GoalTracker.FARMING)));
+		m.addSeparator();
+		for (String region : x.allRegions)
+		{
+			JCheckBoxMenuItem c = new JCheckBoxMenuItem(region, !x.hiddenRegions.contains(region));
+			c.addActionListener(e -> onRegion.accept(region));
+			m.add(c);
+		}
+		return m;
+	}
+
+	private static JMenuItem item(String text, Runnable run)
+	{
+		JMenuItem i = new JMenuItem(text);
+		i.addActionListener(e -> run.run());
+		return i;
+	}
+
+	/** A one-line row: optional item icon, a label, a status on the right, and a coloured edge. */
+	private JComponent line(Integer itemId, String label, String status, Color edge, int indent)
+	{
+		JPanel p = new JPanel(new BorderLayout(6, 0));
+		p.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		p.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 3, 0, 0, edge), new EmptyBorder(5, 6, 5, 8)));
+		if (itemId != null && itemId > 0 && itemManager != null)
+		{
+			JLabel icon = new JLabel();
+			icon.setPreferredSize(new Dimension(18, 16));
+			AsyncBufferedImage img = itemManager.getImage(itemId);
+			img.onLoaded(() -> icon.setIcon(new ImageIcon(ImageUtil.resizeImage(img, 18, 16, true))));
+			p.add(icon, BorderLayout.WEST);
+		}
+		JLabel l = new JLabel(label);
+		l.setFont(FontManager.getRunescapeSmallFont());
+		l.setForeground(Color.WHITE);
+		JLabel s = new JLabel(status);
+		s.setFont(FontManager.getRunescapeSmallFont());
+		s.setForeground(edge == DONE ? DONE : MUTED);
+		p.add(l, BorderLayout.CENTER);
+		p.add(s, BorderLayout.EAST);
+		if (indent == 0)
+		{
+			return p;
+		}
+		JPanel wrap = new JPanel(new BorderLayout());
+		wrap.setBorder(new EmptyBorder(0, indent, 0, 0));
+		wrap.add(p);
+		return wrap;
 	}
 
 	/** A section: its heading, then its goals (the first few until "Show more"). */
@@ -256,7 +447,7 @@ class GoalsPanel extends PluginPanel
 			public void mouseClicked(MouseEvent e)
 			{
 				flip.run();
-				show(lastTitle, lastMessage, lastRows);
+				redraw();
 			}
 		});
 		return l;
@@ -286,7 +477,7 @@ class GoalsPanel extends PluginPanel
 				{
 					collapsed.add(name);
 				}
-				show(lastTitle, lastMessage, lastRows);
+				redraw();
 			}
 		});
 		return p;
@@ -444,6 +635,16 @@ class GoalsPanel extends PluginPanel
 	void onPin(Consumer<String> onPin)
 	{
 		this.onPin = onPin;
+	}
+
+	void onDailyDone(Consumer<String> onDailyDone)
+	{
+		this.onDailyDone = onDailyDone;
+	}
+
+	void onRegion(Consumer<String> onRegion)
+	{
+		this.onRegion = onRegion;
 	}
 
 	/* The right-click menu works anywhere on the row, labels included. */

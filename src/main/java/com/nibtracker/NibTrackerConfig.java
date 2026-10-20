@@ -145,6 +145,27 @@ public interface NibTrackerConfig extends Config
 		return OverlaySize.SMALL;
 	}
 
+	@ConfigItem(keyName = "dailiesPanel", name = "Daily tasks in the panel", description = "List the daily tasks you've switched on in Nib Tracker, and tick them off from the Goals panel", section = goals, position = 34)
+	default boolean dailiesPanel()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "farmingPanel", name = "Farming in the panel", description = "List your farm patches and bird houses by region, with time until they're ready (from RuneLite's Time Tracking, through Nib Tracker)", section = goals, position = 35)
+	default boolean farmingPanel()
+	{
+		return true;
+	}
+
+	/* Farming regions hidden in the panel. Set from the Farming section's right-click menu. */
+	String HIDDEN_FARM_REGIONS = "hiddenFarmRegions";
+
+	@ConfigItem(keyName = HIDDEN_FARM_REGIONS, name = "", description = "", hidden = true)
+	default String hiddenFarmRegions()
+	{
+		return "";
+	}
+
 	/* The goals shown on the game screen, by id. Set from the Goals panel's right-click menu. */
 	String PINNED_GOALS = "pinnedGoals";
 

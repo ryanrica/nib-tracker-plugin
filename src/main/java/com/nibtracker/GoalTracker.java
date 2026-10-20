@@ -2,13 +2,17 @@ package com.nibtracker;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import java.awt.Color;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -80,6 +84,16 @@ class GoalTracker
 
 	/* The id the current Slayer task has in the panel and on screen. */
 	static final String SLAYER_TASK = "slayer-task";
+	/* Ids for the daily tasks and farming icons on the game screen. */
+	static final String DAILIES = "dailies";
+	static final String FARMING = "farming";
+
+	/* Daily tasks and farm timers from the server; tasks ticked off here (id -> when next due) until the server has them. */
+	private List<Routines.Daily> dailies = Collections.emptyList();
+	private List<Routines.Patch> farm = Collections.emptyList();
+	private final Map<String, Long> tickedOff = new HashMap<>();
+	private long lastMinute;
+	private BufferedImage dailyIcon;
 
 	private EventSink sink;
 	private int slayerSeen = -1;
@@ -114,6 +128,8 @@ class GoalTracker
 		this.sink = sink;
 		this.panel = panel;
 		panel.onPin(this::togglePin);
+		panel.onDailyDone(this::dailyDone);
+		panel.onRegion(this::toggleRegion);
 		dirty = true;
 	}
 
@@ -197,6 +213,8 @@ class GoalTracker
 				goals = GoalProgress.parse(g);
 				questsDirty = true;
 			}
+			dailies = Routines.dailies(settings.get("dailies"));
+			farm = Routines.farm(settings.get("farm"));
 			JsonElement aliases = settings.get("kcAliases");
 			if (aliases != null && aliases.isJsonObject())
 			{
@@ -272,17 +290,44 @@ class GoalTracker
 			slayerSeen = slayer.version();
 			dirty = true;
 		}
+		// Timers count down a minute at a time.
+		long minute = System.currentTimeMillis() / Routines.MINUTE;
+		if (minute != lastMinute)
+		{
+			lastMinute = minute;
+			dirty = true;
+		}
 		if (!dirty)
 		{
 			return;
 		}
 		dirty = false;
-		if (!sink.active() || goals.isEmpty())
+		if (!sink.active())
 		{
 			overlay.set(Collections.emptyList());
-			refreshPanel(Collections.emptyList());
+			refreshPanel(Collections.emptyList(), new GoalsPanel.Extras());
 			return;
 		}
+		List<GoalsPanel.Row> rows = goals.isEmpty() ? new ArrayList<>() : goalRows();
+		Set<String> pins = pins();
+		List<GoalOverlay.Entry> onScreen = new ArrayList<>();
+		for (GoalsPanel.Row r : rows)
+		{
+			r.pinned = pins.contains(r.id);
+			if (r.pinned)
+			{
+				onScreen.add(new GoalOverlay.Entry(overlayIcon(r), GoalProgress.shortText(r.detail, r.progress, r.done), r.progress, r.done));
+			}
+		}
+		long now = System.currentTimeMillis();
+		GoalsPanel.Extras extras = extras(now, pins, onScreen);
+		overlay.set(onScreen);
+		refreshPanel(rows, extras);
+	}
+
+	/** Goals as panel rows, announcing any that just completed. */
+	private List<GoalsPanel.Row> goalRows()
+	{
 		readFacts();
 		Map<String, GoalProgress.Result> results = new HashMap<>();
 		for (GoalProgress.Goal g : goals)
@@ -313,18 +358,171 @@ class GoalTracker
 		{
 			rows.add(task);
 		}
-		Set<String> pins = pins();
-		List<GoalOverlay.Entry> onScreen = new ArrayList<>();
-		for (GoalsPanel.Row r : rows)
+		return rows;
+	}
+
+	/**
+	 * Daily tasks and farm timers for the panel, and their icons on the game screen if chosen. A task ticked off here
+	 * counts as done until Nib Tracker's own copy catches up.
+	 */
+	private GoalsPanel.Extras extras(long now, Set<String> pins, List<GoalOverlay.Entry> onScreen)
+	{
+		GoalsPanel.Extras x = new GoalsPanel.Extras();
+		x.dailiesOn = config.dailiesPanel();
+		x.farmOn = config.farmingPanel();
+		x.dailiesPinned = pins.contains(DAILIES);
+		x.farmPinned = pins.contains(FARMING);
+
+		List<Routines.Daily> sorted = new ArrayList<>(dailies);
+		Map<String, Long> dueAt = new HashMap<>();
+		for (Routines.Daily d : sorted)
 		{
-			r.pinned = pins.contains(r.id);
-			if (r.pinned)
+			Long mine = tickedOff.get(d.id);
+			if (mine != null && d.dueAt >= mine)
 			{
-				onScreen.add(new GoalOverlay.Entry(overlayIcon(r), GoalProgress.shortText(r.detail, r.progress, r.done), r.progress, r.done));
+				tickedOff.remove(d.id); // Nib Tracker has it now
+				mine = null;
+			}
+			dueAt.put(d.id, Math.max(d.dueAt, mine == null ? 0 : mine));
+		}
+		sorted.sort(Comparator.comparing((Routines.Daily d) -> dueAt.get(d.id) > now).thenComparing(d -> d.label));
+		int due = 0;
+		for (Routines.Daily d : sorted)
+		{
+			long at = dueAt.get(d.id);
+			boolean isDue = at <= now;
+			due += isDue ? 1 : 0;
+			x.dailies.add(new String[]{d.id, d.label, isDue ? "Due" : "Resets in " + Routines.left(at - now)});
+			x.dailyDue.add(isDue);
+		}
+		if (x.dailiesPinned && !sorted.isEmpty())
+		{
+			onScreen.add(new GoalOverlay.Entry(dailyIcon(), due > 0 ? due + " due" : "Done", (double) (sorted.size() - due) / sorted.size(), due == 0));
+		}
+
+		Set<String> hidden = hiddenRegions();
+		Map<String, List<Routines.Patch>> byRegion = new LinkedHashMap<>();
+		for (Routines.Patch p : farm)
+		{
+			byRegion.computeIfAbsent(p.region, k -> new ArrayList<>()).add(p);
+		}
+		x.allRegions.addAll(byRegion.keySet());
+		x.allRegions.sort(String::compareTo);
+		x.hiddenRegions.addAll(hidden);
+		List<Map.Entry<String, List<Routines.Patch>>> regions = new ArrayList<>(byRegion.entrySet());
+		regions.removeIf(e -> hidden.contains(e.getKey()));
+		regions.sort(Comparator.comparingLong(e -> soonest(e.getValue(), now)));
+		int ready = 0;
+		long next = Long.MAX_VALUE;
+		for (Map.Entry<String, List<Routines.Patch>> e : regions)
+		{
+			List<Routines.Patch> ps = new ArrayList<>(e.getValue());
+			ps.sort(Comparator.comparingLong(p -> p.readyAt(now) ? 0 : p.readyAt > 0 ? p.readyAt : Long.MAX_VALUE));
+			boolean anyReady = ps.stream().anyMatch(p -> p.readyAt(now));
+			GoalsPanel.Region r = new GoalsPanel.Region(e.getKey(), Routines.summary(ps, now), anyReady);
+			for (Routines.Patch p : ps)
+			{
+				boolean isReady = p.readyAt(now);
+				ready += isReady ? 1 : 0;
+				if (!isReady && p.readyAt > 0)
+				{
+					next = Math.min(next, p.readyAt);
+				}
+				String where = !p.name.isEmpty() ? p.name : p.type;
+				r.patches.add(new String[]{p.crop + (where.isEmpty() ? "" : " (" + where + ")"), isReady ? "Ready" : p.readyAt > 0 ? Routines.left(p.readyAt - now) : "Growing"});
+				r.ready.add(isReady);
+				r.items.add(p.itemId);
+			}
+			x.regions.add(r);
+		}
+		if (x.farmPinned && !regions.isEmpty())
+		{
+			onScreen.add(new GoalOverlay.Entry(skillIcons.getSkillImage(Skill.FARMING, true),
+				ready > 0 ? ready + " ready" : next == Long.MAX_VALUE ? "Growing" : Routines.left(next - now), -1, ready > 0));
+		}
+		return x;
+	}
+
+	private static long soonest(List<Routines.Patch> ps, long now)
+	{
+		long best = Long.MAX_VALUE;
+		for (Routines.Patch p : ps)
+		{
+			best = Math.min(best, p.readyAt(now) ? 0 : p.readyAt > 0 ? p.readyAt : Long.MAX_VALUE - 1);
+		}
+		return best;
+	}
+
+	/** Swing thread. A daily task ticked off in the panel: tell Nib Tracker, and count it done here straight away. */
+	void dailyDone(String id)
+	{
+		clientThread.invoke(() -> {
+			for (Routines.Daily d : dailies)
+			{
+				if (d.id.equals(id))
+				{
+					long now = System.currentTimeMillis();
+					tickedOff.put(id, Routines.nextDue(d, now));
+					JsonObject data = new JsonObject();
+					data.addProperty("id", d.id);
+					data.addProperty("label", d.label);
+					sink.emit("chore_done", data);
+					dirty = true;
+					return;
+				}
+			}
+		});
+	}
+
+	/** Swing thread. Shows a farming region in the panel, or hides it; remembered in the plugin's settings. */
+	void toggleRegion(String region)
+	{
+		Set<String> hidden = hiddenRegions();
+		if (!hidden.remove(region))
+		{
+			hidden.add(region);
+		}
+		configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.HIDDEN_FARM_REGIONS, String.join(",", hidden));
+		dirty = true;
+	}
+
+	private Set<String> hiddenRegions()
+	{
+		Set<String> out = new LinkedHashSet<>();
+		for (String s : config.hiddenFarmRegions().split(","))
+		{
+			if (!s.trim().isEmpty())
+			{
+				out.add(s.trim());
 			}
 		}
-		overlay.set(onScreen);
-		refreshPanel(rows);
+		return out;
+	}
+
+	/** The on-screen icon for daily tasks: a small calendar, drawn once. */
+	private BufferedImage dailyIcon()
+	{
+		if (dailyIcon == null)
+		{
+			BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+			Graphics2D g = img.createGraphics();
+			g.setColor(new Color(0xE8, 0xE2, 0xD0));
+			g.fillRect(1, 3, 14, 12);
+			g.setColor(new Color(0xC8, 0x4B, 0x3C));
+			g.fillRect(1, 1, 14, 4);
+			g.setColor(new Color(0x3A, 0x2A, 0x14));
+			g.drawRect(1, 1, 13, 13);
+			for (int i = 0; i < 3; i++)
+			{
+				for (int j = 0; j < 3; j++)
+				{
+					g.fillRect(3 + i * 4, 7 + j * 3, 2, 2);
+				}
+			}
+			g.dispose();
+			dailyIcon = img;
+		}
+		return dailyIcon;
 	}
 
 	/**
@@ -565,7 +763,7 @@ class GoalTracker
 		}
 	}
 
-	private void refreshPanel(List<GoalsPanel.Row> rows)
+	private void refreshPanel(List<GoalsPanel.Row> rows, GoalsPanel.Extras extras)
 	{
 		if (panel == null)
 		{
@@ -607,11 +805,22 @@ class GoalTracker
 			key.append('|').append(r.title).append(r.detail).append(r.hint).append(Math.round(r.progress * 1000)).append(r.done)
 				.append(r.parent).append(r.partsDone).append('/').append(r.partsTotal).append(r.pinned);
 		}
+		key.append('|').append(extras.dailiesOn).append(extras.farmOn).append(extras.dailiesPinned).append(extras.farmPinned)
+			.append(extras.hiddenRegions).append(extras.allRegions);
+		for (String[] d : extras.dailies)
+		{
+			key.append('|').append(String.join(",", d));
+		}
+		for (GoalsPanel.Region r : extras.regions)
+		{
+			key.append('|').append(r.name).append(r.summary);
+			r.patches.forEach(p -> key.append(String.join(",", p)));
+		}
 		if (key.toString().equals(shown))
 		{
 			return;
 		}
 		shown = key.toString();
-		SwingUtilities.invokeLater(() -> panel.show(title, message, rows));
+		SwingUtilities.invokeLater(() -> panel.show(title, message, rows, extras));
 	}
 }
