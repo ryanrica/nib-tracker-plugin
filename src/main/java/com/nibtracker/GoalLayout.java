@@ -1,0 +1,124 @@
+package com.nibtracker;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * How the Goals panel arranges goals: each main goal with its parts folded under it (Base 80 with its skills, a quest
+ * cape with its quests), main goals in sections by kind, and finished main goals in a Completed section.
+ * Kept free of Swing so it can be unit tested.
+ */
+final class GoalLayout
+{
+	private GoalLayout()
+	{
+	}
+
+	/** A main goal and its parts (empty for a goal on its own). */
+	static final class Group
+	{
+		final GoalsPanel.Row main;
+		final List<GoalsPanel.Row> parts;
+
+		Group(GoalsPanel.Row main, List<GoalsPanel.Row> parts)
+		{
+			this.main = main;
+			this.parts = parts;
+		}
+
+		/** Parts done: what the web app counted, plus parts done in game since it last sent them. */
+		int partsDone()
+		{
+			int later = 0;
+			for (GoalsPanel.Row p : parts)
+			{
+				if (p.done && !p.serverDone)
+				{
+					later++;
+				}
+			}
+			return Math.min(partsTotal(), main.partsDone + later);
+		}
+
+		int partsTotal()
+		{
+			return Math.max(main.partsTotal, parts.size());
+		}
+
+		/** The main goal's own progress, or the share of parts done when it has none (a quest cape, say). */
+		double progress()
+		{
+			if (main.done)
+			{
+				return 1;
+			}
+			if (main.progress >= 0 || partsTotal() == 0)
+			{
+				return main.progress;
+			}
+			return (double) partsDone() / partsTotal();
+		}
+	}
+
+	static final class Layout
+	{
+		/** Open main goals by section, in display order; empty sections are left out. */
+		final Map<String, List<Group>> sections = new LinkedHashMap<>();
+		/** Finished main goals, most recent first as the server lists them. */
+		final List<Group> completed = new ArrayList<>();
+	}
+
+	static Layout of(List<GoalsPanel.Row> rows)
+	{
+		Map<String, GoalsPanel.Row> byId = new HashMap<>();
+		for (GoalsPanel.Row r : rows)
+		{
+			byId.put(r.id, r);
+		}
+		Map<String, Group> groups = new LinkedHashMap<>();
+		for (GoalsPanel.Row r : rows)
+		{
+			// A part whose main goal isn't in the list stands on its own.
+			if (r.parent.isEmpty() || !byId.containsKey(r.parent) || r.parent.equals(r.id))
+			{
+				groups.put(r.id, new Group(r, new ArrayList<>()));
+			}
+		}
+		for (GoalsPanel.Row r : rows)
+		{
+			Group g = r.parent.isEmpty() ? null : groups.get(r.parent);
+			if (g != null && !groups.containsKey(r.id))
+			{
+				g.parts.add(r);
+			}
+		}
+		Layout out = new Layout();
+		for (String c : GoalProgress.CATEGORIES)
+		{
+			out.sections.put(c, new ArrayList<>());
+		}
+		for (Group g : groups.values())
+		{
+			// Parts still to do first, closest to done first; finished parts after them.
+			g.parts.sort(Comparator.comparing((GoalsPanel.Row r) -> r.done).thenComparing(r -> -r.progress));
+			if (g.main.done)
+			{
+				out.completed.add(g);
+			}
+			else
+			{
+				out.sections.computeIfAbsent(g.main.category, k -> new ArrayList<>()).add(g);
+			}
+		}
+		for (List<Group> s : out.sections.values())
+		{
+			s.sort(Comparator.comparing((Group g) -> -g.progress()));
+		}
+		out.sections.values().removeIf(List::isEmpty);
+		return out;
+	}
+}

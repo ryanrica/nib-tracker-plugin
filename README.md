@@ -21,6 +21,10 @@ Tracker for the character you're logged in on, grouped into skills, quests, boss
 diaries and combat achievements (click a heading to fold it away). Each goal shows how far along it is, with a bar that
 goes from red to green, and what's left ("88,113 XP to go", "288 more kills").
 
+Goals made of parts are folded into one row: "Base 80 in every skill" shows your overall progress and how many skills
+are done, and you open it to see each skill (the same for a quest cape and its quests). Long sections show the first
+few goals with "Show more", and finished goals move to a Completed section at the bottom.
+
 Click a goal to see more:
 
 - **Skill and XP goals** open that skill's setup page in Nib Tracker. Slayer opens the gear plan for your current task's

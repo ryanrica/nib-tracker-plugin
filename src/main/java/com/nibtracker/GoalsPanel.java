@@ -11,10 +11,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,6 +47,7 @@ class GoalsPanel extends PluginPanel
 	/** One goal to show. progress is 0..1, or -1 for a yes/no goal. */
 	static final class Row
 	{
+		final String id;
 		final String category;
 		final String title;
 		final String detail;
@@ -59,10 +59,17 @@ class GoalsPanel extends PluginPanel
 		final String item;
 		final int fallbackItem;
 		final String link;
+		/* The main goal this is part of (or empty); whether the web app already counts it done; for a main goal, its
+		   parts done and in total as the web app counted them. */
+		String parent = "";
+		boolean serverDone;
+		int partsDone;
+		int partsTotal;
 
-		Row(String category, String title, String detail, String hint, double progress, boolean done, int points,
+		Row(String id, String category, String title, String detail, String hint, double progress, boolean done, int points,
 			Skill skill, String item, int fallbackItem, String link)
 		{
+			this.id = id;
 			this.category = category;
 			this.title = title;
 			this.detail = detail;
@@ -76,6 +83,12 @@ class GoalsPanel extends PluginPanel
 			this.link = link;
 		}
 	}
+
+	/* Each section shows this many goals until "Show more" is clicked. */
+	private static final int SECTION_LIMIT = 6;
+	private static final String COMPLETED = "Completed";
+	/* How far a main goal's parts are indented under it. */
+	private static final int PART_INDENT = 14;
 
 	private static final Color RED = new Color(0xC8, 0x4B, 0x3C);
 	private static final Color AMBER = new Color(0xE0, 0xA0, 0x30);
@@ -91,7 +104,10 @@ class GoalsPanel extends PluginPanel
 	private final ItemManager itemManager;
 	private final SkillIconManager skillIcons;
 	private final Map<String, Icon> icons = new HashMap<>();
-	private final Set<String> collapsed = new HashSet<>();
+	/* Sections folded away (Completed starts folded), sections showing all their goals, and main goals showing their parts. */
+	private final Set<String> collapsed = new HashSet<>(Collections.singleton(COMPLETED));
+	private final Set<String> showAll = new HashSet<>();
+	private final Set<String> expanded = new HashSet<>();
 
 	private final JLabel heading = new JLabel("Goals");
 	private final JLabel summary = new JLabel();
@@ -137,56 +153,111 @@ class GoalsPanel extends PluginPanel
 		status.setText(message == null ? "" : "<html>" + escape(message) + "</html>");
 		status.setVisible(message != null);
 
-		long done = rows.stream().filter(r -> r.done).count();
-		double avg = rows.stream().mapToDouble(r -> r.done ? 1 : Math.max(0, r.progress)).average().orElse(0);
-		summary.setText(done + " of " + rows.size() + " done  ·  " + Math.round(avg * 100) + "% overall");
-		summary.setVisible(!rows.isEmpty());
-		overall.set(avg, done == rows.size());
-		overall.setVisible(!rows.isEmpty());
+		GoalLayout.Layout layout = GoalLayout.of(rows);
+		List<GoalLayout.Group> open = new ArrayList<>();
+		layout.sections.values().forEach(open::addAll);
+		int done = layout.completed.size(), total = open.size() + done;
+		double avg = total == 0 ? 0 : (done + open.stream().mapToDouble(g -> Math.max(0, g.progress())).sum()) / total;
+		summary.setText(done + " of " + total + " goals done  ·  " + Math.round(avg * 100) + "% overall");
+		summary.setVisible(total > 0);
+		overall.set(avg, total > 0 && done == total);
+		overall.setVisible(total > 0);
 
 		list.removeAll();
-		Map<String, List<Row>> sections = new LinkedHashMap<>();
-		for (String c : GoalProgress.CATEGORIES)
+		for (Map.Entry<String, List<GoalLayout.Group>> s : layout.sections.entrySet())
 		{
-			sections.put(c, new ArrayList<>());
+			section(s.getKey(), s.getValue());
 		}
-		for (Row r : rows)
+		if (!layout.completed.isEmpty())
 		{
-			sections.computeIfAbsent(r.category, k -> new ArrayList<>()).add(r);
-		}
-		for (Map.Entry<String, List<Row>> s : sections.entrySet())
-		{
-			List<Row> in = s.getValue();
-			if (in.isEmpty())
-			{
-				continue;
-			}
-			// Closest to done first; finished goals at the bottom.
-			in.sort(Comparator.comparing((Row r) -> r.done).thenComparing(r -> -r.progress));
-			list.add(sectionHeader(s.getKey(), (int) in.stream().filter(r -> r.done).count(), in.size()));
-			if (!collapsed.contains(s.getKey()))
-			{
-				for (Row r : in)
-				{
-					list.add(row(r));
-				}
-			}
+			section(COMPLETED, layout.completed);
 		}
 		list.revalidate();
 		list.repaint();
 	}
 
-	private JComponent sectionHeader(String name, int done, int total)
+	/** A section: its heading, then its goals (the first few until "Show more"). */
+	private void section(String name, List<GoalLayout.Group> groups)
+	{
+		list.add(sectionHeader(name, groups.size()));
+		if (collapsed.contains(name))
+		{
+			return;
+		}
+		int shown = showAll.contains(name) ? groups.size() : Math.min(groups.size(), SECTION_LIMIT);
+		for (int i = 0; i < shown; i++)
+		{
+			group(groups.get(i));
+		}
+		if (groups.size() > SECTION_LIMIT)
+		{
+			boolean all = showAll.contains(name);
+			list.add(toggle(all ? "– Show fewer" : "+ Show " + (groups.size() - SECTION_LIMIT) + " more", 0, () -> {
+				if (!showAll.remove(name))
+				{
+					showAll.add(name);
+				}
+			}));
+		}
+	}
+
+	/** A main goal, and its parts folded under it (Base 80 and its skills). */
+	private void group(GoalLayout.Group g)
+	{
+		int partsDone = g.partsDone(), partsTotal = g.partsTotal();
+		String detail = g.main.progress < 0 && partsTotal > 0 && !g.main.done ? partsDone + " / " + partsTotal : g.main.detail;
+		list.add(row(g.main, g.progress(), detail, 0));
+		if (g.parts.isEmpty())
+		{
+			return;
+		}
+		boolean open = expanded.contains(g.main.id);
+		list.add(toggle(open ? "– Hide parts" : "+ Show parts  ·  " + partsDone + " of " + partsTotal + " done", PART_INDENT, () -> {
+			if (!expanded.remove(g.main.id))
+			{
+				expanded.add(g.main.id);
+			}
+		}));
+		if (open)
+		{
+			for (Row p : g.parts)
+			{
+				list.add(row(p, p.progress, p.detail, PART_INDENT));
+			}
+		}
+	}
+
+	/** A small clickable line ("+ 23 parts", "Show 4 more") that changes what's shown. */
+	private JComponent toggle(String text, int indent, Runnable flip)
+	{
+		JLabel l = new JLabel(text);
+		l.setFont(FontManager.getRunescapeSmallFont());
+		l.setForeground(HEADING);
+		l.setBorder(new EmptyBorder(0, indent + 4, 2, 0));
+		l.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		l.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(MouseEvent e)
+			{
+				flip.run();
+				show(lastTitle, lastMessage, lastRows);
+			}
+		});
+		return l;
+	}
+
+	private JComponent sectionHeader(String name, int count)
 	{
 		boolean shut = collapsed.contains(name);
 		JPanel p = new JPanel(new BorderLayout());
 		p.setBorder(new EmptyBorder(6, 2, 2, 2));
 		JLabel l = new JLabel((shut ? "+ " : "– ") + name.toUpperCase());
 		l.setFont(FontManager.getRunescapeSmallFont());
-		l.setForeground(HEADING);
-		JLabel n = new JLabel(done + " / " + total);
+		l.setForeground(COMPLETED.equals(name) ? DONE : HEADING);
+		JLabel n = new JLabel(String.valueOf(count));
 		n.setFont(FontManager.getRunescapeSmallFont());
-		n.setForeground(done == total ? DONE : MUTED);
+		n.setForeground(MUTED);
 		p.add(l, BorderLayout.WEST);
 		p.add(n, BorderLayout.EAST);
 		p.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -206,12 +277,13 @@ class GoalsPanel extends PluginPanel
 		return p;
 	}
 
-	private JComponent row(Row r)
+	/** One goal. progress and detail can differ from the row's own (a main goal measured by its parts); parts are indented. */
+	private JComponent row(Row r, double progress, String detail, int indent)
 	{
 		JPanel p = new JPanel(new BorderLayout(8, 0));
 		p.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		p.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createMatteBorder(0, 3, 0, 0, r.done ? DONE : colour(r.progress)),
+			BorderFactory.createMatteBorder(0, 3, 0, 0, r.done ? DONE : colour(progress)),
 			new EmptyBorder(6, 6, 6, 8)));
 
 		JLabel icon = new JLabel();
@@ -228,30 +300,30 @@ class GoalsPanel extends PluginPanel
 		JLabel title = new JLabel(r.title);
 		title.setFont(FontManager.getRunescapeSmallFont());
 		title.setForeground(r.done ? MUTED : Color.WHITE);
-		JLabel value = new JLabel(r.done ? "Done" : r.detail);
+		JLabel value = new JLabel(r.done ? "Done" : detail);
 		value.setFont(FontManager.getRunescapeSmallFont());
-		value.setForeground(r.done ? DONE : r.progress < 0 ? MUTED : colour(r.progress).brighter());
+		value.setForeground(r.done ? DONE : progress < 0 ? MUTED : colour(progress).brighter());
 		line.add(title, BorderLayout.CENTER);
 		line.add(value, BorderLayout.EAST);
 		body.add(line);
 
 		// Quests are done or not: their state is the value, with no bar or percentage.
-		boolean measured = r.progress >= 0 && !"Quests".equals(r.category);
+		boolean measured = progress >= 0 && !("Quests".equals(r.category) && r.partsTotal == 0);
 		if (measured || r.done)
 		{
 			Bar bar = new Bar();
 			bar.setPreferredSize(new Dimension(0, 5));
-			bar.set(r.done ? 1 : r.progress, r.done);
+			bar.set(r.done ? 1 : progress, r.done);
 			body.add(bar);
 		}
 
 		String hint = r.done ? (r.points > 0 ? "+" + r.points + " points" : "") : r.hint;
 		if (!hint.isEmpty() || (!r.done && measured))
 		{
-			String text = r.done || !measured ? hint : hint.isEmpty() ? Math.round(r.progress * 100) + "%"
-				: hint + "  ·  " + Math.round(r.progress * 100) + "%";
+			String text = r.done || !measured ? hint : hint.isEmpty() ? Math.round(progress * 100) + "%"
+				: hint + "  ·  " + Math.round(progress * 100) + "%";
 			// Wraps to the row's width, so a task description is shown in full.
-			JLabel h = new JLabel("<html><div style='width:" + HINT_WIDTH + "px'>" + escape(text) + "</div></html>");
+			JLabel h = new JLabel("<html><div style='width:" + (HINT_WIDTH - indent) + "px'>" + escape(text) + "</div></html>");
 			h.setFont(FontManager.getRunescapeSmallFont());
 			h.setForeground(r.done ? DONE.darker() : MUTED);
 			body.add(h);
@@ -283,7 +355,14 @@ class GoalsPanel extends PluginPanel
 				}
 			});
 		}
-		return p;
+		if (indent == 0)
+		{
+			return p;
+		}
+		JPanel wrap = new JPanel(new BorderLayout());
+		wrap.setBorder(new EmptyBorder(0, indent, 0, 0));
+		wrap.add(p);
+		return wrap;
 	}
 
 	/** Skill icon, the item's own picture if it's a tradeable item, or a picture for the kind of goal. */

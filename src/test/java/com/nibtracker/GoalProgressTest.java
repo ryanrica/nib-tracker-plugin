@@ -21,12 +21,12 @@ public class GoalProgressTest
 	public void parseSkipsMalformedAndCaps()
 	{
 		StringBuilder sb = new StringBuilder("[1, {\"title\":\"no id\",\"type\":\"kc\"}, {\"id\":\"x\"}");
-		for (int i = 0; i < 60; i++)
+		for (int i = 0; i < 160; i++)
 		{
 			sb.append(",{\"id\":\"g").append(i).append("\",\"type\":\"custom\"}");
 		}
 		List<GoalProgress.Goal> l = GoalProgress.parse(new JsonParser().parse(sb.append("]").toString()));
-		assertEquals(50, l.size());
+		assertEquals(GoalProgress.MAX_GOALS, l.size());
 		assertEquals("Goal", l.get(0).title);
 		assertTrue(GoalProgress.parse(null).isEmpty());
 		assertTrue(GoalProgress.parse(new JsonParser().parse("{}")).isEmpty());
@@ -192,5 +192,17 @@ public class GoalProgressTest
 		assertEquals("Kill 25 lizardman shamans", GoalProgress.compute(ca, new GoalProgress.Facts()).hint);
 		GoalProgress.Goal bare = goal("{\"id\":\"b\",\"type\":\"combat_achievement\",\"params\":{\"task\":\"Master of Buckets\"}}");
 		assertEquals("Updates when Nib Tracker sees it", GoalProgress.compute(bare, new GoalProgress.Facts()).hint);
+	}
+
+	@Test
+	public void parsesMainGoalsAndParts()
+	{
+		GoalProgress.Goal main = goal("{\"id\":\"b\",\"type\":\"base_level\",\"params\":{\"level\":80},\"parts\":[3,23]}");
+		assertEquals("", main.parent);
+		assertEquals(3, main.partsDone);
+		assertEquals(23, main.partsTotal);
+		GoalProgress.Goal part = goal("{\"id\":\"s\",\"type\":\"skill_level\",\"params\":{\"skill\":\"Smithing\",\"level\":80},\"parent\":\"b\",\"parts\":\"x\"}");
+		assertEquals("b", part.parent);
+		assertEquals(0, part.partsTotal);
 	}
 }

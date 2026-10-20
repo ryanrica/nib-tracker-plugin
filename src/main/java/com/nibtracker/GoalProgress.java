@@ -40,6 +40,11 @@ final class GoalProgress
 		final int points;
 		/* One line on what the goal is, from the web app (e.g. a combat achievement's task), or empty. */
 		final String info;
+		/* The main goal this one is part of (Base 80 for 80 Smithing), or empty. */
+		String parent = "";
+		/* For a main goal: how many of its parts the web app counts as done, and how many there are. */
+		int partsDone;
+		int partsTotal;
 
 		Goal(String id, String title, String type, JsonObject params, double target, double current, double progress, boolean done, int points,
 			String info)
@@ -110,6 +115,9 @@ final class GoalProgress
 	}
 
 	/** The panel section a goal type goes in, in display order. */
+	/* At most this many goals are read from the server (main goals with their parts). */
+	static final int MAX_GOALS = 150;
+
 	static final String[] CATEGORIES = {"Skills", "Quests", "Bosses", "Collection log", "Items", "Achievement diaries", "Combat achievements", "Other"};
 
 	static String category(String type)
@@ -160,11 +168,19 @@ final class GoalProgress
 				continue;
 			}
 			JsonElement params = o.get("params");
-			out.add(new Goal(id, text(o, "title").isEmpty() ? "Goal" : text(o, "title"), type,
+			Goal goal = new Goal(id, text(o, "title").isEmpty() ? "Goal" : text(o, "title"), type,
 				params != null && params.isJsonObject() ? params.getAsJsonObject() : new JsonObject(),
 				number(o, "target", -1), number(o, "current", -1), number(o, "progress", -1),
-				o.has("done") && o.get("done").isJsonPrimitive() && o.get("done").getAsBoolean(), (int) number(o, "points", 0), text(o, "info")));
-			if (out.size() >= 50)
+				o.has("done") && o.get("done").isJsonPrimitive() && o.get("done").getAsBoolean(), (int) number(o, "points", 0), text(o, "info"));
+			goal.parent = text(o, "parent");
+			JsonElement parts = o.get("parts");
+			if (parts != null && parts.isJsonArray() && parts.getAsJsonArray().size() == 2)
+			{
+				goal.partsDone = (int) Math.max(0, number(parts.getAsJsonArray(), 0));
+				goal.partsTotal = (int) Math.max(0, number(parts.getAsJsonArray(), 1));
+			}
+			out.add(goal);
+			if (out.size() >= MAX_GOALS)
 			{
 				break;
 			}
@@ -358,5 +374,11 @@ final class GoalProgress
 	{
 		JsonElement v = o.get(key);
 		return v != null && v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber() ? v.getAsDouble() : fallback;
+	}
+
+	private static double number(JsonArray a, int i)
+	{
+		JsonElement v = a.get(i);
+		return v != null && v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber() ? v.getAsDouble() : 0;
 	}
 }

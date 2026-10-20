@@ -261,8 +261,13 @@ class GoalTracker
 			default:
 				break;
 		}
-		return new GoalsPanel.Row(category, g.title, r.detail, r.hint, r.progress, r.done, g.points, skill,
+		GoalsPanel.Row row = new GoalsPanel.Row(g.id, category, g.title, r.detail, r.hint, r.progress, r.done, g.points, skill,
 			item == null || item.isEmpty() ? null : item, GoalsPanel.fallbackItem(category), link(g, planner));
+		row.parent = g.parent;
+		row.serverDone = g.done;
+		row.partsDone = g.partsDone;
+		row.partsTotal = g.partsTotal;
+		return row;
 	}
 
 	private static Skill skill(String name)
@@ -435,7 +440,8 @@ class GoalTracker
 		StringBuilder key = new StringBuilder(title).append('|').append(message);
 		for (GoalsPanel.Row r : rows)
 		{
-			key.append('|').append(r.title).append(r.detail).append(r.hint).append(Math.round(r.progress * 1000)).append(r.done);
+			key.append('|').append(r.title).append(r.detail).append(r.hint).append(Math.round(r.progress * 1000)).append(r.done)
+				.append(r.parent).append(r.partsDone).append('/').append(r.partsTotal);
 		}
 		if (key.toString().equals(shown))
 		{
