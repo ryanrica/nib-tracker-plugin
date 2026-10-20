@@ -27,7 +27,10 @@ Click a goal to see more:
   monster (or the Slayer page if there's no task), and Farming opens the Farm page.
 - **Kill counts, items and collection log slots** open the boss plan for the boss that drops them; an item no boss
   drops opens its OSRS Wiki page.
-- **Combat achievements** open the boss plan, which lists your combat achievement goals for that boss.
+- **Combat achievements** open the boss plan, or the task's wiki page when it isn't for a boss the planner covers.
+
+Each of those pages in Nib Tracker has a section listing your goals for it, with what to do and how far along you are.
+Goals the plugin can't measure itself show a line from Nib Tracker on what they are (a combat achievement's task, say).
 - **Quests** open the wiki quick guide, and **achievement diaries** the wiki diary page.
 
 If Nib Tracker is already open in your browser, that tab switches to the page instead of a new one staying open.

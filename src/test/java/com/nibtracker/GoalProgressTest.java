@@ -184,4 +184,13 @@ public class GoalProgressTest
 		assertEquals("https://oldschool.runescape.wiki/w/Kourend_%26_Kebos_Diary",
 			GoalTracker.link(goal("{\"id\":\"d\",\"type\":\"diary_tier\",\"params\":{\"region\":\"Kourend & Kebos\",\"tier\":\"Hard\"}}"), null));
 	}
+
+	@Test
+	public void serverInfoIsTheHint()
+	{
+		GoalProgress.Goal ca = goal("{\"id\":\"a\",\"type\":\"combat_achievement\",\"params\":{\"task\":\"Shayzien Protector\"},\"info\":\"Kill 25 lizardman shamans\"}");
+		assertEquals("Kill 25 lizardman shamans", GoalProgress.compute(ca, new GoalProgress.Facts()).hint);
+		GoalProgress.Goal bare = goal("{\"id\":\"b\",\"type\":\"combat_achievement\",\"params\":{\"task\":\"Master of Buckets\"}}");
+		assertEquals("Updates when Nib Tracker sees it", GoalProgress.compute(bare, new GoalProgress.Facts()).hint);
+	}
 }

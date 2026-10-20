@@ -85,6 +85,8 @@ class GoalsPanel extends PluginPanel
 	private static final Color MUTED = new Color(0x9A, 0x9A, 0x9A);
 	private static final Color HEADING = new Color(0xD8, 0xB6, 0x6A);
 	private static final int ICON = 28;
+	/* The text column beside the icon in the side panel, in pixels. */
+	private static final int HINT_WIDTH = PluginPanel.PANEL_WIDTH - 82;
 
 	private final ItemManager itemManager;
 	private final SkillIconManager skillIcons;
@@ -246,8 +248,10 @@ class GoalsPanel extends PluginPanel
 		String hint = r.done ? (r.points > 0 ? "+" + r.points + " points" : "") : r.hint;
 		if (!hint.isEmpty() || (!r.done && measured))
 		{
-			JLabel h = new JLabel(r.done || !measured ? hint : hint.isEmpty() ? Math.round(r.progress * 100) + "%"
-				: hint + "  ·  " + Math.round(r.progress * 100) + "%");
+			String text = r.done || !measured ? hint : hint.isEmpty() ? Math.round(r.progress * 100) + "%"
+				: hint + "  ·  " + Math.round(r.progress * 100) + "%";
+			// Wraps to the row's width, so a task description is shown in full.
+			JLabel h = new JLabel("<html><div style='width:" + HINT_WIDTH + "px'>" + escape(text) + "</div></html>");
 			h.setFont(FontManager.getRunescapeSmallFont());
 			h.setForeground(r.done ? DONE.darker() : MUTED);
 			body.add(h);

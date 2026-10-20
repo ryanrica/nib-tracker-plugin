@@ -38,8 +38,11 @@ final class GoalProgress
 		final double progress;
 		final boolean done;
 		final int points;
+		/* One line on what the goal is, from the web app (e.g. a combat achievement's task), or empty. */
+		final String info;
 
-		Goal(String id, String title, String type, JsonObject params, double target, double current, double progress, boolean done, int points)
+		Goal(String id, String title, String type, JsonObject params, double target, double current, double progress, boolean done, int points,
+			String info)
 		{
 			this.id = id;
 			this.title = title;
@@ -50,6 +53,7 @@ final class GoalProgress
 			this.progress = progress;
 			this.done = done;
 			this.points = points;
+			this.info = info;
 		}
 
 		String str(String key)
@@ -159,7 +163,7 @@ final class GoalProgress
 			out.add(new Goal(id, text(o, "title").isEmpty() ? "Goal" : text(o, "title"), type,
 				params != null && params.isJsonObject() ? params.getAsJsonObject() : new JsonObject(),
 				number(o, "target", -1), number(o, "current", -1), number(o, "progress", -1),
-				o.has("done") && o.get("done").isJsonPrimitive() && o.get("done").getAsBoolean(), (int) number(o, "points", 0)));
+				o.has("done") && o.get("done").isJsonPrimitive() && o.get("done").getAsBoolean(), (int) number(o, "points", 0), text(o, "info")));
 			if (out.size() >= 50)
 			{
 				break;
@@ -289,18 +293,10 @@ final class GoalProgress
 		boolean counted = g.target > 0 && g.current >= 0;
 		String detail = counted ? fmt(g.current) + " / " + fmt(g.target) : g.done ? "Done" : "";
 		double p = g.done ? 1 : g.progress >= 0 ? Math.min(1, g.progress) : counted ? ratio(g.current, g.target) : -1;
-		String hint;
-		switch (g.type)
-		{
-			case "clog_item":
-				hint = "Not in your collection log yet";
-				break;
-			case "item_owned":
-				hint = "Open your bank to count it";
-				break;
-			default:
-				hint = "Updates when Nib Tracker sees it";
-		}
+		String hint = !g.info.isEmpty() ? g.info
+			: "clog_item".equals(g.type) ? "Not in your collection log yet"
+			: "item_owned".equals(g.type) ? "Open your bank to count it"
+			: "Updates when Nib Tracker sees it";
 		return new Result(p, detail, hint, g.done);
 	}
 
