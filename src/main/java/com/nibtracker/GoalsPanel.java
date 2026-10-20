@@ -420,14 +420,9 @@ class GoalsPanel extends PluginPanel
 				chip.setIconTextGap(4);
 			}
 			chip.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-			chip.addMouseListener(new MouseAdapter()
-			{
-				@Override
-				public void mouseClicked(MouseEvent e)
-				{
-					filter.put(view, o);
-					redraw();
-				}
+			onClick(chip, () -> {
+				filter.put(view, o);
+				redraw();
 			});
 			filters.add(chip);
 		}
@@ -649,20 +644,12 @@ class GoalsPanel extends PluginPanel
 			boolean open = expanded.contains(key);
 			JComponent row = line(null, (open ? "– " : "+ ") + r.name, r.summary, null, r.anyReady ? DONE : AMBER, 0);
 			row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-			row.addMouseListener(new MouseAdapter()
-			{
-				@Override
-				public void mouseClicked(MouseEvent e)
+			onClick(row, () -> {
+				if (!expanded.remove(key))
 				{
-					if (SwingUtilities.isLeftMouseButton(e))
-					{
-						if (!expanded.remove(key))
-						{
-							expanded.add(key);
-						}
-						redraw();
-					}
+					expanded.add(key);
 				}
+				redraw();
 			});
 			JPopupMenu m = regionsMenu(x);
 			m.insert(item("Hide " + r.name, () -> onRegion.accept(r.name)), 0);
@@ -935,14 +922,9 @@ class GoalsPanel extends PluginPanel
 		l.setForeground(HEADING);
 		l.setBorder(new EmptyBorder(0, indent + 4, 2, 0));
 		l.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-		l.addMouseListener(new MouseAdapter()
-		{
-			@Override
-			public void mouseClicked(MouseEvent e)
-			{
-				flip.run();
-				redraw();
-			}
+		onClick(l, () -> {
+			flip.run();
+			redraw();
 		});
 		return l;
 	}
@@ -962,17 +944,12 @@ class GoalsPanel extends PluginPanel
 		p.add(n, BorderLayout.EAST);
 		p.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		p.setToolTipText(shut ? "Show " + name.toLowerCase() : "Hide " + name.toLowerCase());
-		p.addMouseListener(new MouseAdapter()
-		{
-			@Override
-			public void mouseClicked(MouseEvent e)
+		onClick(p, () -> {
+			if (!collapsed.remove(name))
 			{
-				if (!collapsed.remove(name))
-				{
-					collapsed.add(name);
-				}
-				redraw();
+				collapsed.add(name);
 			}
+			redraw();
 		});
 		return p;
 	}
@@ -1046,17 +1023,9 @@ class GoalsPanel extends PluginPanel
 		if (r.link != null)
 		{
 			p.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			onClick(p, () -> LinkBrowser.browse(r.link));
 			p.addMouseListener(new MouseAdapter()
 			{
-				@Override
-				public void mouseClicked(MouseEvent e)
-				{
-					if (SwingUtilities.isLeftMouseButton(e))
-					{
-						LinkBrowser.browse(r.link);
-					}
-				}
-
 				@Override
 				public void mouseEntered(MouseEvent e)
 				{
@@ -1160,6 +1129,26 @@ class GoalsPanel extends PluginPanel
 				inheritMenu((Container) k);
 			}
 		}
+	}
+
+	/**
+	 * Runs when the left button is released anywhere over the component. Swing's own "clicked" is dropped if the mouse
+	 * moves even a pixel between press and release, which made the filter chips feel like they needed pinpoint clicks.
+	 * The action runs after the event is done, as it usually rebuilds the panel (and this component with it).
+	 */
+	private static void onClick(JComponent c, Runnable action)
+	{
+		c.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseReleased(MouseEvent e)
+			{
+				if (SwingUtilities.isLeftMouseButton(e) && c.contains(e.getPoint()))
+				{
+					SwingUtilities.invokeLater(action);
+				}
+			}
+		});
 	}
 
 	/**
