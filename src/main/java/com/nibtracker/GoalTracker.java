@@ -19,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import javax.swing.SwingUtilities;
@@ -322,7 +323,10 @@ class GoalTracker
 			// Finished goals leave the screen by themselves, so it only shows what's still to do.
 			if (r.pinned && !r.done)
 			{
-				onScreen.add(new GoalOverlay.Entry(overlayIcon(r), GoalProgress.shortText(r.detail, r.progress, false), r.progress, false, tooltip(r, r.info, r.travel)));
+				// The detail line: what to do (a combat achievement's task) or what's left ("250,964 XP to go").
+				String detail = !r.info.isEmpty() ? r.info : r.hint;
+				onScreen.add(new GoalOverlay.Entry(overlayIcon(r), r.title, GoalProgress.shortText(r.detail, r.progress, false), detail,
+					r.progress, false, tooltip(r, r.info, r.travel)));
 			}
 		}
 		long now = System.currentTimeMillis();
@@ -421,7 +425,8 @@ class GoalTracker
 					tip.append("</br>").append(Text.escapeJagex(d.how));
 				}
 			}
-			onScreen.add(new GoalOverlay.Entry(calendarIcon(), dueNow.size() + " due", (double) (sorted.size() - dueNow.size()) / sorted.size(), false, tip.toString()));
+			onScreen.add(new GoalOverlay.Entry(calendarIcon(), "Daily tasks", dueNow.size() + " due", dueNow.get(0).label + (dueNow.size() > 1 ? " +" + (dueNow.size() - 1) + " more" : ""),
+				(double) (sorted.size() - dueNow.size()) / sorted.size(), false, tip.toString()));
 		}
 
 		Set<String> hidden = hiddenRegions();
@@ -457,6 +462,10 @@ class GoalTracker
 				String crop = p.crop + (p.name.isEmpty() || p.name.equals(p.region) ? "" : " · " + p.name);
 				GoalsPanel.PatchView v = new GoalsPanel.PatchView(p.region, crop, p.type,
 					isReady ? "Ready" : p.readyAt > 0 ? Routines.left(p.readyAt - now) : "Growing", p.travel, p.travelHow, isReady, p.itemId);
+				v.kindLabel = p.kindLabel;
+				v.order = p.order;
+				v.travelCat = p.travelCat;
+				v.travelItem = p.travelItem;
 				r.patches.add(v);
 				x.patches.add(v);
 			}
@@ -475,10 +484,84 @@ class GoalTracker
 			{
 				tip.append("</br>Next: ").append(Text.escapeJagex(next.region)).append(", ").append(Text.escapeJagex(next.crop)).append(" in ").append(Routines.left(next.readyAt - now));
 			}
-			onScreen.add(new GoalOverlay.Entry(skillIcons.getSkillImage(Skill.FARMING, true),
-				!readyNow.isEmpty() ? readyNow.size() + " ready" : next == null ? "Growing" : Routines.left(next.readyAt - now), -1, false, tip.toString()));
+			String detail = !readyNow.isEmpty() ? "Ready: " + readyNow.stream().map(p -> p.region).distinct().collect(Collectors.joining(", "))
+				: next == null ? "" : "Next: " + next.region + ", " + next.crop;
+			onScreen.add(new GoalOverlay.Entry(skillIcons.getSkillImage(Skill.FARMING, true), "Farming",
+				!readyNow.isEmpty() ? readyNow.size() + " ready" : next == null ? "Growing" : Routines.left(next.readyAt - now), detail,
+				-1, !readyNow.isEmpty(), tip.toString()));
+		}
+		// One kind of patch on screen (Herbs, say): how many are ready, and the run to do them in, with each stop's teleport.
+		for (String pin : pins)
+		{
+			if (!pin.startsWith(FARMING + ":"))
+			{
+				continue;
+			}
+			String kind = pin.substring(FARMING.length() + 1);
+			x.pinnedKinds.add(kind);
+			List<Routines.Patch> ps = new ArrayList<>();
+			for (Routines.Patch p : farm)
+			{
+				if (kind.equals(p.kindLabel) && !hidden.contains(p.region))
+				{
+					ps.add(p);
+				}
+			}
+			if (!ps.isEmpty())
+			{
+				onScreen.add(kindEntry(kind, ps, now));
+			}
 		}
 		return x;
+	}
+
+	/** One kind of patch on screen: ready count (or time to the next), and the run in order with each stop's teleport. */
+	private GoalOverlay.Entry kindEntry(String kind, List<Routines.Patch> ps, long now)
+	{
+		ps.sort(Comparator.comparingInt((Routines.Patch p) -> p.order > 0 ? p.order : Integer.MAX_VALUE).thenComparing(p -> p.region));
+		List<Routines.Patch> ready = new ArrayList<>();
+		Routines.Patch next = null;
+		for (Routines.Patch p : ps)
+		{
+			if (p.readyAt(now))
+			{
+				ready.add(p);
+			}
+			else if (p.readyAt > 0 && (next == null || p.readyAt < next.readyAt))
+			{
+				next = p;
+			}
+		}
+		// Stops with something ready, in run order: "1 Ardougne cloak 2  2 Camelot Teleport".
+		Map<String, Routines.Patch> stops = new LinkedHashMap<>();
+		for (Routines.Patch p : ready)
+		{
+			stops.putIfAbsent(p.region, p);
+		}
+		StringBuilder route = new StringBuilder();
+		StringBuilder tip = new StringBuilder(ColorUtil.wrapWithColorTag(Text.escapeJagex(kind), TIP_TITLE));
+		int n = 0;
+		for (Routines.Patch p : stops.values())
+		{
+			n++;
+			route.append(route.length() == 0 ? "" : "  ").append(n).append(' ').append(p.travel.isEmpty() ? p.region : p.travel);
+			tip.append("</br>").append(n).append(". ").append(Text.escapeJagex(p.region)).append(p.travel.isEmpty() ? "" : ": " + Text.escapeJagex(p.travel));
+			for (Routines.Patch q : ready)
+			{
+				if (q.region.equals(p.region))
+				{
+					tip.append("</br>    ").append(Text.escapeJagex(q.crop)).append(" (ready)");
+				}
+			}
+		}
+		if (stops.isEmpty() && next != null)
+		{
+			tip.append("</br>Next: ").append(Text.escapeJagex(next.region)).append(", ").append(Text.escapeJagex(next.crop)).append(" in ").append(Routines.left(next.readyAt - now));
+		}
+		BufferedImage icon = ps.get(0).itemId > 0 ? itemManager.getImage(ps.get(0).itemId) : skillIcons.getSkillImage(Skill.FARMING, true);
+		String value = !ready.isEmpty() ? ready.size() + " ready" : next == null ? "Growing" : Routines.left(next.readyAt - now);
+		String detail = route.length() > 0 ? route.toString() : next == null ? "" : "Next: " + next.region;
+		return new GoalOverlay.Entry(icon, kind, value, detail, (double) ready.size() / ps.size(), !ready.isEmpty(), tip.toString());
 	}
 
 	/** A daily task that's just been done: the same pop-up and chat line as a goal. */
@@ -638,6 +721,10 @@ class GoalTracker
 	/** The icon for a goal on screen: its skill, its item, or a picture for its kind. Looked up once. */
 	private BufferedImage overlayIcon(GoalsPanel.Row r)
 	{
+		if ("Combat achievements".equals(r.category))
+		{
+			return GoalsPanel.CA_BOOK; // the combat achievements book, as on the Nib Tracker site
+		}
 		String key = r.skill != null ? "skill:" + r.skill.name() : r.item != null ? "item:" + r.item.toLowerCase(Locale.ROOT) : "id:" + r.fallbackItem;
 		BufferedImage cached = overlayIcons.get(key);
 		if (cached != null)
@@ -691,9 +778,6 @@ class GoalTracker
 			case "clog_item":
 			case "item_owned":
 				item = g.str("item");
-				break;
-			case "combat_achievement":
-				skill = Skill.ATTACK;
 				break;
 			default:
 				break;

@@ -53,6 +53,14 @@ final class Routines
 		/* The best way there with what's in your bank, and how to use it, from Nib Tracker; empty when unknown. */
 		String travel = "";
 		String travelHow = "";
+		/* Its kind (herb, fruit_tree...) and label (Herbs), its run (patches done together), its stop in that run's order
+		   (1 = first, 0 = not planned), and the teleport's kind (ITEM, SPELLBOOK, FAIRY_RING...) and item, from Nib Tracker. */
+		String kind = "";
+		String kindLabel = "";
+		String run = "";
+		int order;
+		String travelCat = "";
+		String travelItem = "";
 
 		Patch(String region, String name, String type, String crop, int itemId, long readyAt, boolean ready)
 		{
@@ -99,6 +107,12 @@ final class Routines
 					o.has("ready") && o.get("ready").isJsonPrimitive() && o.get("ready").getAsBoolean());
 				p.travel = str(o, "travel");
 				p.travelHow = str(o, "travelHow");
+				p.kind = str(o, "kind");
+				p.kindLabel = str(o, "kindLabel").isEmpty() ? p.type : str(o, "kindLabel");
+				p.run = str(o, "run");
+				p.order = (int) num(o, "order");
+				p.travelCat = str(o, "travelCat");
+				p.travelItem = str(o, "travelItem");
 				out.add(p);
 			}
 		}

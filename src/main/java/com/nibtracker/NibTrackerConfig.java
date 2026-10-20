@@ -139,19 +139,33 @@ public interface NibTrackerConfig extends Config
 		}
 	}
 
-	@ConfigItem(keyName = "overlaySize", name = "On-screen goal size", description = "How big goals you show on the game screen are (right-click a goal in the Goals panel to show it). Hold Alt to move them.", section = goals, position = 33)
+	enum OverlayStyle
+	{
+		/** A card: each entry with its icon, name, value, a progress bar and a line of detail (the next teleport, the task). */
+		DETAILED,
+		/** Small boxes: icon and value only, details on hover. */
+		COMPACT
+	}
+
+	@ConfigItem(keyName = "overlayStyle", name = "On-screen style", description = "Detailed shows each goal's name, progress bar and next step; Compact shows just the icon and number (hover for details)", section = goals, position = 33)
+	default OverlayStyle overlayStyle()
+	{
+		return OverlayStyle.DETAILED;
+	}
+
+	@ConfigItem(keyName = "overlaySize", name = "On-screen goal size", description = "How big goals you show on the game screen are (right-click a goal in the Goals panel to show it). Hold Alt to move them.", section = goals, position = 34)
 	default OverlaySize overlaySize()
 	{
 		return OverlaySize.SMALL;
 	}
 
-	@ConfigItem(keyName = "dailiesPanel", name = "Daily tasks in the panel", description = "List the daily tasks you've switched on in Nib Tracker, and tick them off from the Goals panel", section = goals, position = 34)
+	@ConfigItem(keyName = "dailiesPanel", name = "Daily tasks in the panel", description = "List the daily tasks you've switched on in Nib Tracker, and tick them off from the Goals panel", section = goals, position = 36)
 	default boolean dailiesPanel()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "farmingPanel", name = "Farming in the panel", description = "List your farm patches and bird houses by region, with time until they're ready (from RuneLite's Time Tracking, through Nib Tracker)", section = goals, position = 35)
+	@ConfigItem(keyName = "farmingPanel", name = "Farming in the panel", description = "List your farm patches and bird houses by region, with time until they're ready (from RuneLite's Time Tracking, through Nib Tracker)", section = goals, position = 37)
 	default boolean farmingPanel()
 	{
 		return true;

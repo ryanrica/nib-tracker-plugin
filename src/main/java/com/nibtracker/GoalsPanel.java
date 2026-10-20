@@ -6,7 +6,6 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
@@ -17,8 +16,10 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -114,6 +115,8 @@ class GoalsPanel extends PluginPanel
 	/* Sub-filter values in the order they're offered. */
 	private static final List<String> TAG_ORDER = Arrays.asList("Easy", "Medium", "Hard", "Elite", "Master", "Grandmaster", "Not started", "In progress");
 	private static final BufferedImage LOGO = ImageUtil.loadImageResource(GoalsPanel.class, "goals_icon.png");
+	/* The combat achievements book, as Nib Tracker shows it (OSRS Wiki's Combat achievements detail image, made small). */
+	static final BufferedImage CA_BOOK = ImageUtil.loadImageResource(GoalsPanel.class, "combat_achievements.png");
 	/* How far a main goal's parts are indented under it. */
 	private static final int PART_INDENT = 14;
 
@@ -145,7 +148,7 @@ class GoalsPanel extends PluginPanel
 	private final Map<String, String> filter = new HashMap<>();
 	private boolean building;
 	private final JPanel tabsHolder = new JPanel(new BorderLayout());
-	private final JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+	private final JPanel filters = new JPanel(new GridLayout(0, 3, 4, 4));
 
 	private final JLabel heading = new JLabel("Goals");
 	private final JLabel summary = new JLabel();
@@ -251,10 +254,20 @@ class GoalsPanel extends PluginPanel
 		}
 		else if (FARMING.equals(view))
 		{
-			List<String> types = new ArrayList<>();
-			types.add(ALL);
-			extras.patches.stream().map(p -> p.type).filter(t -> !t.isEmpty()).distinct().sorted().forEach(types::add);
-			filters(types);
+			// One chip per kind of patch you have a timer on (Herbs, Trees, Fruit trees, Hespori...), each with its crop's icon.
+			List<String> kinds = new ArrayList<>();
+			kinds.add(ALL);
+			Map<String, Integer> kindIcons = new HashMap<>();
+			for (PatchView p : extras.patches)
+			{
+				if (!p.kindLabel.isEmpty() && !kinds.contains(p.kindLabel))
+				{
+					kinds.add(p.kindLabel);
+				}
+				kindIcons.putIfAbsent(p.kindLabel, p.itemId);
+			}
+			kinds.subList(1, kinds.size()).sort(String::compareTo);
+			filters(kinds, kindIcons);
 			farming(extras, false);
 		}
 		else
@@ -319,7 +332,12 @@ class GoalsPanel extends PluginPanel
 			tab.setIcon(new ImageIcon(fitTo(GoalTracker.calendarIcon(), 22)));
 			return;
 		}
-		Skill skill = FARMING.equals(v) ? Skill.FARMING : "Bosses".equals(v) ? Skill.SLAYER : "Combat achievements".equals(v) ? Skill.ATTACK : null;
+		if ("Combat achievements".equals(v))
+		{
+			tab.setIcon(new ImageIcon(fitTo(CA_BOOK, 24)));
+			return;
+		}
+		Skill skill = FARMING.equals(v) ? Skill.FARMING : "Bosses".equals(v) ? Skill.SLAYER : null;
 		if (skill != null)
 		{
 			tab.setIcon(new ImageIcon(fitTo(skillIcons.getSkillImage(skill, false), 22)));
@@ -340,7 +358,17 @@ class GoalsPanel extends PluginPanel
 	/** The sub-filters for the current view (tiers, quest state, patch type...), as small clickable chips. */
 	private void filters(List<String> options)
 	{
+		filters(options, Collections.emptyMap());
+	}
+
+	/**
+	 * Sub-filter chips in a grid that wraps onto as many rows as it needs, so every option shows (farming has many patch
+	 * kinds). Chips can carry an item icon (a seed or crop for each patch kind).
+	 */
+	private void filters(List<String> options, Map<String, Integer> iconItems)
+	{
 		filters.removeAll();
+		filters.setLayout(new GridLayout(0, iconItems.isEmpty() ? 3 : 2, 4, 4));
 		String current = filter.getOrDefault(view, ALL);
 		if (!options.contains(current))
 		{
@@ -360,7 +388,14 @@ class GoalsPanel extends PluginPanel
 			chip.setForeground(on ? Color.WHITE : MUTED);
 			chip.setOpaque(true);
 			chip.setBackground(on ? ColorScheme.BRAND_ORANGE.darker() : ColorScheme.DARKER_GRAY_COLOR);
-			chip.setBorder(new EmptyBorder(2, 6, 2, 6));
+			chip.setBorder(new EmptyBorder(3, 5, 3, 5));
+			Integer item = iconItems.get(o);
+			if (item != null && item > 0 && itemManager != null)
+			{
+				AsyncBufferedImage img = itemManager.getImage(item);
+				img.onLoaded(() -> chip.setIcon(new ImageIcon(fitTo(img, 14))));
+				chip.setIconTextGap(4);
+			}
 			chip.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 			chip.addMouseListener(new MouseAdapter()
 			{
@@ -448,6 +483,8 @@ class GoalsPanel extends PluginPanel
 		/* Every region with a timer, shown or not, for the show/hide menu. */
 		final List<String> allRegions = new ArrayList<>();
 		final Set<String> hiddenRegions = new HashSet<>();
+		/* Patch kinds (Herbs...) shown on the game screen. */
+		final Set<String> pinnedKinds = new HashSet<>();
 	}
 
 	static final class DailyView
@@ -478,6 +515,11 @@ class GoalsPanel extends PluginPanel
 		final String travelHow;
 		final boolean ready;
 		final int itemId;
+		/* Its kind's label (Herbs), its stop in the run order (0 = not planned), and the teleport's kind and item. */
+		String kindLabel = "";
+		int order;
+		String travelCat = "";
+		String travelItem = "";
 
 		PatchView(String region, String crop, String type, String status, String travel, String travelHow, boolean ready, int itemId)
 		{
@@ -575,17 +617,7 @@ class GoalsPanel extends PluginPanel
 		String f = overview ? ALL : currentFilter();
 		if (!ALL.equals(f))
 		{
-			for (PatchView p : x.patches)
-			{
-				if (f.equals(p.type))
-				{
-					JComponent line = line(p.itemId, p.region + "  ·  " + p.crop, p.status, p.travel.isEmpty() ? null : p.travel, p.ready ? DONE : AMBER, 0);
-					line.setToolTipText(p.travelHow.isEmpty() ? null : "<html>" + escape(p.travel) + "<br>" + escape(p.travelHow) + "</html>");
-					line.setComponentPopupMenu(regionsMenu(x));
-					inheritMenu(line);
-					list.add(line);
-				}
-			}
+			runOrder(x, f);
 			return;
 		}
 		for (Region r : x.regions)
@@ -630,6 +662,115 @@ class GoalsPanel extends PluginPanel
 					list.add(t);
 				}
 			}
+		}
+	}
+
+	/**
+	 * One kind of patch (Herbs, say) as a run: stops in the order Nib Tracker's farm run planner works out with your bank,
+	 * each numbered, with the teleport to use there and its patches under it. Stops the planner didn't place go last.
+	 */
+	private void runOrder(Extras x, String kind)
+	{
+		List<PatchView> ps = new ArrayList<>();
+		for (PatchView p : x.patches)
+		{
+			if (kind.equals(p.kindLabel))
+			{
+				ps.add(p);
+			}
+		}
+		ps.sort(Comparator.comparingInt((PatchView p) -> p.order > 0 ? p.order : Integer.MAX_VALUE).thenComparing(p -> p.region));
+		Map<String, List<PatchView>> stops = new LinkedHashMap<>();
+		for (PatchView p : ps)
+		{
+			stops.computeIfAbsent(p.order + "|" + p.region, k -> new ArrayList<>()).add(p);
+		}
+		long ready = ps.stream().filter(p -> p.ready).count();
+		boolean pinned = x.pinnedKinds.contains(kind);
+		Runnable pin = () -> onPin.accept(GoalTracker.FARMING + ":" + kind);
+		JComponent head = line(null, "Run order  ·  " + stops.size() + (stops.size() == 1 ? " stop" : " stops"), ready > 0 ? ready + " ready" : "Growing", null, ready > 0 ? DONE : AMBER, 0);
+		JPopupMenu headMenu = new JPopupMenu();
+		headMenu.add(item(pinned ? "Remove " + kind + " from game screen" : "Show " + kind + " on game screen", pin));
+		head.setComponentPopupMenu(headMenu);
+		head.setToolTipText("Right-click to " + (pinned ? "remove " + kind + " from" : "show " + kind + " on") + " the game screen");
+		inheritMenu(head);
+		list.add(head);
+		int n = 0;
+		for (List<PatchView> stop : stops.values())
+		{
+			n++;
+			PatchView first = stop.get(0);
+			long r = stop.stream().filter(p -> p.ready).count();
+			String status = r > 0 ? r + " ready" : stop.stream().map(p -> p.status).min(Comparator.comparingInt(String::length).thenComparing(s -> s)).orElse("");
+			JComponent row = line(null, n + "   " + first.region, status, null, r > 0 ? DONE : AMBER, 0);
+			JPopupMenu m = new JPopupMenu();
+			m.add(item(pinned ? "Remove " + kind + " from game screen" : "Show " + kind + " on game screen", pin));
+			row.setComponentPopupMenu(m);
+			inheritMenu(row);
+			list.add(row);
+			if (!first.travel.isEmpty())
+			{
+				JLabel t = new JLabel(first.travel);
+				t.setFont(FontManager.getRunescapeSmallFont());
+				t.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+				t.setBorder(new EmptyBorder(1, PART_INDENT + 4, 1, 0));
+				t.setIconTextGap(5);
+				teleIcon(first, t);
+				t.setToolTipText(first.travelHow.isEmpty() ? null : "<html><div style='width:180px'>" + escape(first.travelHow) + "</div></html>");
+				list.add(t);
+			}
+			for (PatchView p : stop)
+			{
+				list.add(line(p.itemId, p.crop, p.status, null, p.ready ? DONE : AMBER, PART_INDENT));
+			}
+		}
+	}
+
+	/** The icon for a teleport: its item (a cape, a tablet...), or one for its kind (fairy ring, spell, spirit tree, house). */
+	private void teleIcon(PatchView p, JLabel label)
+	{
+		BufferedImage fixed = null;
+		int item = -1;
+		switch (p.travelCat)
+		{
+			case "FAIRY_RING":
+				item = ItemID.DRAMEN_STAFF;
+				break;
+			case "SPIRIT_TREE":
+				item = ItemID.SPIRIT_TREE_SEED;
+				break;
+			case "SPELLBOOK":
+				fixed = skillIcons.getSkillImage(Skill.MAGIC, true);
+				break;
+			case "PORTAL_NEXUS":
+			case "HOUSE":
+				fixed = skillIcons.getSkillImage(Skill.CONSTRUCTION, true);
+				break;
+			default:
+				if (!p.travelItem.isEmpty() && itemManager != null)
+				{
+					for (ItemPrice ip : itemManager.search(p.travelItem))
+					{
+						if (ip.getName().equalsIgnoreCase(p.travelItem))
+						{
+							item = ip.getId();
+							break;
+						}
+					}
+				}
+				if (item <= 0)
+				{
+					fixed = skillIcons.getSkillImage(Skill.MAGIC, true);
+				}
+		}
+		if (fixed != null)
+		{
+			label.setIcon(new ImageIcon(fitTo(fixed, 14)));
+		}
+		else if (item > 0 && itemManager != null)
+		{
+			AsyncBufferedImage img = itemManager.getImage(item);
+			img.onLoaded(() -> label.setIcon(new ImageIcon(fitTo(img, 16))));
 		}
 	}
 
@@ -920,6 +1061,11 @@ class GoalsPanel extends PluginPanel
 	/** Skill icon, the item's own picture if it's a tradeable item, or a picture for the kind of goal. */
 	private void icon(Row r, JLabel label)
 	{
+		if ("Combat achievements".equals(r.category))
+		{
+			label.setIcon(icons.computeIfAbsent("ca", k -> new ImageIcon(fitTo(CA_BOOK, 24))));
+			return;
+		}
 		String key = r.skill != null ? "skill:" + r.skill.name() : r.item != null ? "item:" + r.item.toLowerCase() : "id:" + r.fallbackItem;
 		Icon cached = icons.get(key);
 		if (cached != null)

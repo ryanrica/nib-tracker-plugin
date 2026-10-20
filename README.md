@@ -37,15 +37,16 @@ through Nib Tracker, so new plantings show up once the Nib Tracker site has caug
 The icons along the top of the panel switch between the **Overview** (everything) and one kind at a time: skills,
 quests, bosses, collection log, items, achievement diaries, combat achievements, daily tasks and farming. Each has its
 own filters: combat achievements and diaries by tier, quests by whether you've started them, daily tasks by due or done,
-and farming by patch type (herbs, say), which lists every patch of that type with its region and the best way there
-with what's in your bank.
+and farming by kind of patch (herbs, trees, fruit trees, Hespori and every other kind you have a timer on). A kind shows
+as a run: the stops in the order Nib Tracker's farm run planner works out with your bank, each numbered, with the
+teleport to use there and its patches under it.
 
-To keep an eye on a goal while you play, right-click it in the panel and choose **Show on game screen**. Daily tasks
-(how many are due) and farming (how many patches are ready, or the time to the next) can go on screen the same way. It
-shows as a small icon with a short number ("73/80", "34 left") and a bar along the bottom; hover over it for the details
-(what's left, a combat achievement's task, the daily tasks to do, how to get there). Finished goals, and daily tasks once
-they're all done, leave the screen by themselves, so you can leave it on. Hold Alt to move them, and pick the size under
-**Goals** in the plugin settings. Right-click again to take it off.
+To keep an eye on a goal while you play, right-click it in the panel and choose **Show on game screen**. Daily tasks,
+farming, or one kind of patch (just herbs, say) can go on screen the same way. The on-screen card shows each with its
+icon, name, value ("82/83", "2 ready"), a progress bar and a line on what's next (the XP to go, a combat achievement's
+task, the herb run's teleports in order); hover for everything. Choose **Compact** under **Goals** in the plugin settings
+for just icons and numbers. Finished goals, and daily tasks once they're all done, leave the screen by themselves, so you
+can leave it on. Hold Alt to move it, and pick the size in the settings too. Right-click again to take something off.
 
 Finished daily tasks get the same pop-up and chat message as goals.
 
