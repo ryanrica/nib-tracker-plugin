@@ -33,6 +33,8 @@ import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
@@ -167,6 +169,13 @@ class GoalsPanel extends PluginPanel
 		this.skillIcons = skillIcons;
 		setBorder(new EmptyBorder(10, 10, 10, 10));
 		setLayout(new BorderLayout(0, 10));
+		// The scrollbar always shows, so the panel keeps its width when a tab is short enough not to need it (it
+		// appearing and going made everything shift sideways when switching between Overview and other tabs).
+		JScrollPane scroll = getScrollPane();
+		if (scroll != null)
+		{
+			scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+		}
 
 		heading.setFont(FontManager.getRunescapeBoldFont());
 		heading.setForeground(Color.WHITE);
@@ -308,7 +317,15 @@ class GoalsPanel extends PluginPanel
 				if (!building && !v.equals(view))
 				{
 					view = v;
-					SwingUtilities.invokeLater(this::redraw);
+					// A new tab starts at its top, not wherever the last one was scrolled to.
+					SwingUtilities.invokeLater(() -> {
+						redraw();
+						JScrollPane scroll = getScrollPane();
+						if (scroll != null)
+						{
+							scroll.getVerticalScrollBar().setValue(0);
+						}
+					});
 				}
 				return true;
 			});
@@ -354,8 +371,7 @@ class GoalsPanel extends PluginPanel
 		int item = "Skills".equals(v) ? ItemID.SKILLCAPE_MAX : fallbackItem(v);
 		if (item > 0 && itemManager != null)
 		{
-			AsyncBufferedImage img = itemManager.getImage(item);
-			onLoaded(img, () -> tab.setIcon(new ImageIcon(fitTo(img, 24))));
+			itemIcon(item, 24, tab::setIcon);
 		}
 		else
 		{
@@ -400,8 +416,7 @@ class GoalsPanel extends PluginPanel
 			Integer item = iconItems.get(o);
 			if (item != null && item > 0 && itemManager != null)
 			{
-				AsyncBufferedImage img = itemManager.getImage(item);
-				onLoaded(img, () -> chip.setIcon(new ImageIcon(fitTo(img, 14))));
+				itemIcon(item, 14, chip::setIcon);
 				chip.setIconTextGap(4);
 			}
 			chip.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -777,8 +792,7 @@ class GoalsPanel extends PluginPanel
 		}
 		else if (item > 0 && itemManager != null)
 		{
-			AsyncBufferedImage img = itemManager.getImage(item);
-			onLoaded(img, () -> label.setIcon(new ImageIcon(fitTo(img, 16))));
+			itemIcon(item, 16, label::setIcon);
 		}
 	}
 
@@ -1149,12 +1163,44 @@ class GoalsPanel extends PluginPanel
 	}
 
 	/**
-	 * Runs once an item image has loaded, on the Swing thread. ItemManager finishes loading on the client thread, and
-	 * setting an icon from there can leave half-drawn rows behind.
+	 * Runs once an item image has loaded, on the Swing thread. An image already loaded runs it straight away, so a redraw
+	 * shows its icons at once; one still loading finishes on the client thread, and is handed to the Swing thread from
+	 * there (setting an icon from the client thread can leave half-drawn rows behind).
 	 */
 	private static void onLoaded(AsyncBufferedImage img, Runnable r)
 	{
-		img.onLoaded(() -> SwingUtilities.invokeLater(r));
+		img.onLoaded(() -> {
+			if (SwingUtilities.isEventDispatchThread())
+			{
+				r.run();
+			}
+			else
+			{
+				SwingUtilities.invokeLater(r);
+			}
+		});
+	}
+
+	/**
+	 * An item's icon at this size, from the cache when it's been drawn before. Until it loads, a blank icon of the same
+	 * size holds its place, so text beside it doesn't jump when it arrives.
+	 */
+	private void itemIcon(int item, int size, Consumer<Icon> set)
+	{
+		String key = "item:" + item + ":" + size;
+		Icon cached = icons.get(key);
+		if (cached != null)
+		{
+			set.accept(cached);
+			return;
+		}
+		set.accept(new ImageIcon(new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)));
+		AsyncBufferedImage img = itemManager.getImage(item);
+		onLoaded(img, () -> {
+			Icon i = new ImageIcon(fitTo(img, size));
+			icons.put(key, i);
+			set.accept(i);
+		});
 	}
 
 	/** An image scaled to fit a square of this size, keeping its shape. */
