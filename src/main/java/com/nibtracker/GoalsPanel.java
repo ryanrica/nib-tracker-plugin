@@ -274,8 +274,16 @@ class GoalsPanel extends PluginPanel
 		{
 			categoryView(view, layout);
 		}
-		list.revalidate();
-		list.repaint();
+		// The header's grid layout keeps room for hidden components, so hidden chips are removed, not just hidden;
+		// otherwise leaving Farming left a blank block the size of its chips under the tabs.
+		if (!filters.isVisible())
+		{
+			filters.removeAll();
+		}
+		// The tabs and filter chips above the list change height too (Farming has rows of chips, Overview none), so the
+		// whole panel is laid out and painted again; repainting only the list left old chips drawn over the goals.
+		revalidate();
+		repaint();
 	}
 
 	private void redraw()
@@ -347,7 +355,7 @@ class GoalsPanel extends PluginPanel
 		if (item > 0 && itemManager != null)
 		{
 			AsyncBufferedImage img = itemManager.getImage(item);
-			img.onLoaded(() -> tab.setIcon(new ImageIcon(fitTo(img, 24))));
+			onLoaded(img, () -> tab.setIcon(new ImageIcon(fitTo(img, 24))));
 		}
 		else
 		{
@@ -393,7 +401,7 @@ class GoalsPanel extends PluginPanel
 			if (item != null && item > 0 && itemManager != null)
 			{
 				AsyncBufferedImage img = itemManager.getImage(item);
-				img.onLoaded(() -> chip.setIcon(new ImageIcon(fitTo(img, 14))));
+				onLoaded(img, () -> chip.setIcon(new ImageIcon(fitTo(img, 14))));
 				chip.setIconTextGap(4);
 			}
 			chip.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -770,7 +778,7 @@ class GoalsPanel extends PluginPanel
 		else if (item > 0 && itemManager != null)
 		{
 			AsyncBufferedImage img = itemManager.getImage(item);
-			img.onLoaded(() -> label.setIcon(new ImageIcon(fitTo(img, 16))));
+			onLoaded(img, () -> label.setIcon(new ImageIcon(fitTo(img, 16))));
 		}
 	}
 
@@ -816,7 +824,7 @@ class GoalsPanel extends PluginPanel
 			JLabel icon = new JLabel();
 			icon.setPreferredSize(new Dimension(18, 16));
 			AsyncBufferedImage img = itemManager.getImage(itemId);
-			img.onLoaded(() -> icon.setIcon(new ImageIcon(ImageUtil.resizeImage(img, 18, 16, true))));
+			onLoaded(img, () -> icon.setIcon(new ImageIcon(ImageUtil.resizeImage(img, 18, 16, true))));
 			p.add(icon, BorderLayout.WEST);
 		}
 		JPanel text = new JPanel(new DynamicGridLayout(0, 1, 0, 2));
@@ -1101,7 +1109,7 @@ class GoalsPanel extends PluginPanel
 			return;
 		}
 		AsyncBufferedImage img = itemManager.getImage(id);
-		img.onLoaded(() -> {
+		onLoaded(img, () -> {
 			Icon i = new ImageIcon(fit(img));
 			icons.put(key, i);
 			label.setIcon(i);
@@ -1138,6 +1146,15 @@ class GoalsPanel extends PluginPanel
 				inheritMenu((Container) k);
 			}
 		}
+	}
+
+	/**
+	 * Runs once an item image has loaded, on the Swing thread. ItemManager finishes loading on the client thread, and
+	 * setting an icon from there can leave half-drawn rows behind.
+	 */
+	private static void onLoaded(AsyncBufferedImage img, Runnable r)
+	{
+		img.onLoaded(() -> SwingUtilities.invokeLater(r));
 	}
 
 	/** An image scaled to fit a square of this size, keeping its shape. */
