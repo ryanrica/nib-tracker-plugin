@@ -75,6 +75,9 @@ class GoalTracker
 	/* Whether each goal was done when last worked out this session: a completion is a change from false to true. */
 	private final Map<String, Boolean> wasDone = new HashMap<>();
 	private final Set<String> announced = new HashSet<>();
+	/* Goals finished while RuneLite has been open (kept through logouts and hops). Only these show as Completed: goals
+	   finished in an earlier session stay out of the panel, so the list never builds up. */
+	private final Set<String> finishedThisSession = new HashSet<>();
 	private volatile boolean dirty;
 	private boolean questsDirty;
 	/* What the panel shows now, so it's only rebuilt when something on it changes. */
@@ -82,6 +85,7 @@ class GoalTracker
 
 	void start(EventSink sink, GoalsPanel panel)
 	{
+		finishedThisSession.clear();
 		this.sink = sink;
 		this.panel = panel;
 		dirty = true;
@@ -188,7 +192,7 @@ class GoalTracker
 	public void onItemContainerChanged(ItemContainerChanged e)
 	{
 		int id = e.getContainerId();
-		if (id != InventoryID.BANK && id != InventoryID.INV && id != InventoryID.WORN)
+		if (id != InventoryID.BANK && id != InventoryID.SEED_VAULT && id != InventoryID.INV && id != InventoryID.WORN)
 		{
 			return;
 		}
@@ -222,14 +226,27 @@ class GoalTracker
 			return;
 		}
 		readFacts();
-		List<GoalsPanel.Row> rows = new ArrayList<>();
+		Map<String, GoalProgress.Result> results = new HashMap<>();
 		for (GoalProgress.Goal g : goals)
 		{
 			GoalProgress.Result r = GoalProgress.compute(g, facts);
+			results.put(g.id, r);
 			Boolean before = wasDone.put(g.id, r.done);
 			if (Boolean.FALSE.equals(before) && r.done && announced.add(g.id))
 			{
+				finishedThisSession.add(g.id);
 				completed(g);
+			}
+		}
+		List<GoalsPanel.Row> rows = new ArrayList<>();
+		for (GoalProgress.Goal g : goals)
+		{
+			GoalProgress.Result r = results.get(g.id);
+			// A goal finished before this session is left out, unless it's a part of a main goal still open (it counts there).
+			GoalProgress.Result main = g.parent.isEmpty() ? null : results.get(g.parent);
+			if (r.done && !finishedThisSession.contains(g.id) && (main == null || main.done))
+			{
+				continue;
 			}
 			rows.add(row(g, r, planner));
 		}
@@ -352,6 +369,7 @@ class GoalTracker
 			facts.bank.clear();
 			facts.carried.clear();
 			names(containers.get(InventoryID.BANK), facts.bank);
+			names(containers.get(InventoryID.SEED_VAULT), facts.bank);
 			names(containers.get(InventoryID.INV), facts.carried);
 			names(containers.get(InventoryID.WORN), facts.carried);
 		}
