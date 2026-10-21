@@ -33,6 +33,26 @@ public class OverlayBoxesTest
 	}
 
 	@Test
+	public void anOldGroupPinKeepsItsOwnBoxBesideItsTabsSinglePins()
+	{
+		GoalOverlay.Entry oldDailies = entry("legacy:dailies", "Daily tasks", false);
+		GoalOverlay.Entry oneDaily = entry("Daily tasks", "Herb run", true);
+		GoalOverlay.Entry oldFarming = entry("legacy:farming", "Farming", true);
+		GoalOverlay.Entry onePatch = entry("Farming", "Ranarr", true);
+		GoalOverlay.Entry oldHerbs = entry("legacy:farming:Herbs", "Herbs", true);
+		GoalOverlay.Entry herbKind = entry("Herbs", "Herbs", true);
+		List<Map.Entry<String, List<GoalOverlay.Entry>>> boxes = GoalOverlay.boxes(
+			Arrays.asList(oldDailies, oneDaily, oldFarming, onePatch, oldHerbs, herbKind));
+		assertEquals(6, boxes.size());
+		for (Map.Entry<String, List<GoalOverlay.Entry>> b : boxes)
+		{
+			assertEquals(1, b.getValue().size());
+			// One entry: no title line, so the legacy key never shows and old pins look as before.
+			assertNull(GoalOverlay.heading(b.getKey(), b.getValue()));
+		}
+	}
+
+	@Test
 	public void noEntriesNoBoxes()
 	{
 		assertTrue(GoalOverlay.boxes(Collections.emptyList()).isEmpty());

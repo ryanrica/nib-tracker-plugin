@@ -95,6 +95,9 @@ class GoalTracker
 	/* The game-screen boxes for things pinned from the Daily tasks and Farming tabs. */
 	private static final String DAILIES_BOX = "Daily tasks";
 	private static final String FARMING_BOX = "Farming";
+	/* Old group pins (dailies, farming, farming:<Label>) each keep a box of their own, as before boxes: "legacy:" + the pin.
+	   A box with one entry has no title line, so this key is never shown. */
+	private static final String LEGACY_BOX = "legacy:";
 
 	/* Daily tasks and farm timers from the server; tasks ticked off here (id -> when next due) until the server has them. */
 	private List<Routines.Daily> dailies = Collections.emptyList();
@@ -464,7 +467,7 @@ class GoalTracker
 					tip.append("</br>").append(Text.escapeJagex(d.how));
 				}
 			}
-			onScreen.add(new GoalOverlay.Entry(DAILIES_BOX, calendarIcon(), "Daily tasks", dueNow.size() + " due", dueNow.get(0).label + (dueNow.size() > 1 ? " +" + (dueNow.size() - 1) + " more" : ""),
+			onScreen.add(new GoalOverlay.Entry(LEGACY_BOX + DAILIES, calendarIcon(), "Daily tasks", dueNow.size() + " due", dueNow.get(0).label + (dueNow.size() > 1 ? " +" + (dueNow.size() - 1) + " more" : ""),
 				(double) (sorted.size() - dueNow.size()) / sorted.size(), false, tip.toString()));
 		}
 
@@ -544,7 +547,7 @@ class GoalTracker
 			}
 			String detail = !readyNow.isEmpty() ? "Ready: " + readyNow.stream().map(p -> p.region).distinct().collect(Collectors.joining(", "))
 				: next == null ? "" : "Next: " + next.region + ", " + next.crop;
-			onScreen.add(new GoalOverlay.Entry(FARMING_BOX, skillIcons.getSkillImage(Skill.FARMING, true), "Farming",
+			onScreen.add(new GoalOverlay.Entry(LEGACY_BOX + FARMING, skillIcons.getSkillImage(Skill.FARMING, true), "Farming",
 				!readyNow.isEmpty() ? readyNow.size() + " ready" : next == null ? "Growing" : Routines.left(next.readyAt - now), detail,
 				-1, !readyNow.isEmpty(), tip.toString()));
 		}
@@ -567,7 +570,7 @@ class GoalTracker
 			}
 			if (!ps.isEmpty())
 			{
-				onScreen.add(kindEntry(kind, ps, now));
+				onScreen.add(kindEntry(LEGACY_BOX + pin, kind, ps, now));
 			}
 		}
 		pinnedSingles(now, pins, onScreen, x, rows, sorted, dueAt);
@@ -638,7 +641,7 @@ class GoalTracker
 				}
 				if (!ps.isEmpty())
 				{
-					onScreen.add(kindEntry(label, ps, now));
+					onScreen.add(kindEntry(label, label, ps, now));
 				}
 			}
 			else if (pin.startsWith(favPrefix))
@@ -743,7 +746,7 @@ class GoalTracker
 	}
 
 	/** One kind of patch on screen: ready count (or time to the next), and the run in order with each stop's teleport. */
-	private GoalOverlay.Entry kindEntry(String kind, List<Routines.Patch> ps, long now)
+	private GoalOverlay.Entry kindEntry(String box, String kind, List<Routines.Patch> ps, long now)
 	{
 		ps.sort(Comparator.comparingInt((Routines.Patch p) -> p.order > 0 ? p.order : Integer.MAX_VALUE).thenComparing(p -> p.region));
 		List<Routines.Patch> ready = new ArrayList<>();
@@ -788,7 +791,7 @@ class GoalTracker
 		BufferedImage icon = ps.get(0).itemId > 0 ? itemManager.getImage(ps.get(0).itemId) : skillIcons.getSkillImage(Skill.FARMING, true);
 		String value = !ready.isEmpty() ? ready.size() + " ready" : next == null ? "Growing" : Routines.left(next.readyAt - now);
 		String detail = route.length() > 0 ? route.toString() : next == null ? "" : "Next: " + next.region;
-		return new GoalOverlay.Entry(kind, icon, kind, value, detail, (double) ready.size() / ps.size(), !ready.isEmpty(), tip.toString());
+		return new GoalOverlay.Entry(box, icon, kind, value, detail, (double) ready.size() / ps.size(), !ready.isEmpty(), tip.toString());
 	}
 
 	/** A daily task that's just been done: the same pop-up and chat line as a goal. */
