@@ -92,6 +92,9 @@ class GoalTracker
 	/* Ids for the daily tasks and farming icons on the game screen. */
 	static final String DAILIES = "dailies";
 	static final String FARMING = "farming";
+	/* The game-screen boxes for things pinned from the Daily tasks and Farming tabs. */
+	private static final String DAILIES_BOX = "Daily tasks";
+	private static final String FARMING_BOX = "Farming";
 
 	/* Daily tasks and farm timers from the server; tasks ticked off here (id -> when next due) until the server has them. */
 	private List<Routines.Daily> dailies = Collections.emptyList();
@@ -351,16 +354,23 @@ class GoalTracker
 			// Finished goals leave the screen by themselves, so it only shows what's still to do.
 			if (r.pinned && !r.done)
 			{
-				// The detail line: what to do (a combat achievement's task) or what's left ("250,964 XP to go").
-				String detail = !r.info.isEmpty() ? r.info : r.hint;
-				onScreen.add(new GoalOverlay.Entry(overlayIcon(r), r.title, GoalProgress.shortText(r.detail, r.progress, false), detail,
-					r.progress, false, tooltip(r, r.info, r.travel)));
+				// In its home tab's box, also when pinned from Overview.
+				onScreen.add(goalEntry(r, r.category));
 			}
 		}
 		long now = System.currentTimeMillis();
-		GoalsPanel.Extras extras = extras(now, pins, onScreen);
+		GoalsPanel.Extras extras = extras(now, pins, onScreen, rows);
 		overlay.set(onScreen);
 		refreshPanel(rows, extras);
+	}
+
+	/** A goal on the game screen, in the given box. */
+	private GoalOverlay.Entry goalEntry(GoalsPanel.Row r, String box)
+	{
+		// The detail line: what to do (a combat achievement's task) or what's left ("250,964 XP to go").
+		String detail = !r.info.isEmpty() ? r.info : r.hint;
+		return new GoalOverlay.Entry(box, overlayIcon(r), r.title, GoalProgress.shortText(r.detail, r.progress, false), detail,
+			r.progress, false, tooltip(r, r.info, r.travel));
 	}
 
 	/** Goals as panel rows, announcing any that just completed. */
@@ -402,7 +412,7 @@ class GoalTracker
 	 * Daily tasks and farm timers for the panel, and their icons on the game screen if chosen. A task ticked off here
 	 * counts as done until Nib Tracker's own copy catches up.
 	 */
-	private GoalsPanel.Extras extras(long now, Set<String> pins, List<GoalOverlay.Entry> onScreen)
+	private GoalsPanel.Extras extras(long now, Set<String> pins, List<GoalOverlay.Entry> onScreen, List<GoalsPanel.Row> rows)
 	{
 		GoalsPanel.Extras x = new GoalsPanel.Extras();
 		x.dailiesOn = config.dailiesPanel();
@@ -454,7 +464,7 @@ class GoalTracker
 					tip.append("</br>").append(Text.escapeJagex(d.how));
 				}
 			}
-			onScreen.add(new GoalOverlay.Entry(calendarIcon(), "Daily tasks", dueNow.size() + " due", dueNow.get(0).label + (dueNow.size() > 1 ? " +" + (dueNow.size() - 1) + " more" : ""),
+			onScreen.add(new GoalOverlay.Entry(DAILIES_BOX, calendarIcon(), "Daily tasks", dueNow.size() + " due", dueNow.get(0).label + (dueNow.size() > 1 ? " +" + (dueNow.size() - 1) + " more" : ""),
 				(double) (sorted.size() - dueNow.size()) / sorted.size(), false, tip.toString()));
 		}
 
@@ -534,7 +544,7 @@ class GoalTracker
 			}
 			String detail = !readyNow.isEmpty() ? "Ready: " + readyNow.stream().map(p -> p.region).distinct().collect(Collectors.joining(", "))
 				: next == null ? "" : "Next: " + next.region + ", " + next.crop;
-			onScreen.add(new GoalOverlay.Entry(skillIcons.getSkillImage(Skill.FARMING, true), "Farming",
+			onScreen.add(new GoalOverlay.Entry(FARMING_BOX, skillIcons.getSkillImage(Skill.FARMING, true), "Farming",
 				!readyNow.isEmpty() ? readyNow.size() + " ready" : next == null ? "Growing" : Routines.left(next.readyAt - now), detail,
 				-1, !readyNow.isEmpty(), tip.toString()));
 		}
@@ -560,7 +570,176 @@ class GoalTracker
 				onScreen.add(kindEntry(kind, ps, now));
 			}
 		}
+		pinnedSingles(now, pins, onScreen, x, rows, sorted, dueAt);
 		return x;
+	}
+
+	/**
+	 * The pins from ▣ on single rows and group headers: a daily task (while due), a patch, the contract, Special, All
+	 * trees, one kind of patch, and a tab's whole favourites list. Each goes in its tab's box, or its group's.
+	 */
+	private void pinnedSingles(long now, Set<String> pins, List<GoalOverlay.Entry> onScreen, GoalsPanel.Extras x,
+		List<GoalsPanel.Row> rows, List<Routines.Daily> dailyList, Map<String, Long> dueAt)
+	{
+		String dailyPrefix = Favourites.dailyPin(""), patchPrefix = Favourites.patchPin(""), kindPrefix = Favourites.kindPin("");
+		String favPrefix = Favourites.groupPin("");
+		Map<String, Routines.Patch> patches = new HashMap<>();
+		for (Routines.Patch p : farm)
+		{
+			patches.putIfAbsent(p.id(), p);
+		}
+		Map<String, Routines.Daily> daily = new HashMap<>();
+		for (Routines.Daily d : dailyList)
+		{
+			daily.put(d.id, d);
+		}
+		for (String pin : pins)
+		{
+			if (pin.startsWith(dailyPrefix))
+			{
+				// Like the whole-dailies pin: on screen only while due, so it goes away once done.
+				Routines.Daily d = daily.get(pin.substring(dailyPrefix.length()));
+				if (d != null && dueAt.get(d.id) <= now)
+				{
+					onScreen.add(dailyEntry(d, dueAt.get(d.id), now, DAILIES_BOX));
+				}
+			}
+			else if (pin.startsWith(patchPrefix))
+			{
+				// Always there while pinned: a ready patch stays until it's harvested or replanted, then shows its new state.
+				Routines.Patch p = patches.get(pin.substring(patchPrefix.length()));
+				if (p != null)
+				{
+					onScreen.add(patchEntry(p, now, FARMING_BOX));
+				}
+			}
+			else if (pin.equals(FarmGroups.CONTRACT_ID))
+			{
+				if (x.contract != null)
+				{
+					onScreen.add(contractEntry(x.contract, FARMING_BOX));
+				}
+			}
+			else if (pin.equals(Favourites.SPECIAL_PIN) || pin.equals(Favourites.TREES_PIN) || pin.startsWith(kindPrefix))
+			{
+				String key = pin.startsWith(kindPrefix) ? pin.substring(kindPrefix.length()) : null;
+				String label = pin.equals(Favourites.SPECIAL_PIN) ? "Special" : pin.equals(Favourites.TREES_PIN) ? "All trees" : key;
+				List<Routines.Patch> ps = new ArrayList<>();
+				for (Routines.Patch p : farm)
+				{
+					if (key != null ? key.equals(p.kind) : pin.equals(Favourites.SPECIAL_PIN) ? FarmGroups.special(p.kind) : FarmGroups.tree(p.kind))
+					{
+						ps.add(p);
+						if (key != null && !p.kindLabel.isEmpty())
+						{
+							label = p.kindLabel;
+						}
+					}
+				}
+				if (!ps.isEmpty())
+				{
+					onScreen.add(kindEntry(label, ps, now));
+				}
+			}
+			else if (pin.startsWith(favPrefix))
+			{
+				String tab = pin.substring(favPrefix.length());
+				favouritesBox(tab, x.favourites.getOrDefault(tab, Collections.emptySet()), now, onScreen, x, rows, patches, daily, dueAt);
+			}
+		}
+	}
+
+	/** A tab's favourites list on the game screen, live: one line per favourite, ready (or due) ones first. */
+	private void favouritesBox(String tab, Set<String> favs, long now, List<GoalOverlay.Entry> onScreen, GoalsPanel.Extras x,
+		List<GoalsPanel.Row> rows, Map<String, Routines.Patch> patches, Map<String, Routines.Daily> daily, Map<String, Long> dueAt)
+	{
+		String box = "★ " + tab + " favourites";
+		List<GoalOverlay.Entry> out = new ArrayList<>();
+		if (FARMING_BOX.equals(tab))
+		{
+			for (String id : favs)
+			{
+				if (FarmGroups.CONTRACT_ID.equals(id))
+				{
+					if (x.contract != null)
+					{
+						out.add(contractEntry(x.contract, box));
+					}
+				}
+				else if (patches.containsKey(id))
+				{
+					out.add(patchEntry(patches.get(id), now, box));
+				}
+			}
+		}
+		else if (DAILIES_BOX.equals(tab))
+		{
+			for (String id : favs)
+			{
+				Routines.Daily d = daily.get(id);
+				if (d != null)
+				{
+					out.add(dailyEntry(d, dueAt.get(d.id), now, box));
+				}
+			}
+		}
+		else
+		{
+			Map<String, GoalsPanel.Row> byId = new HashMap<>();
+			for (GoalsPanel.Row r : rows)
+			{
+				byId.putIfAbsent(r.id, r);
+			}
+			for (String id : favs)
+			{
+				GoalsPanel.Row r = byId.get(id);
+				if (r != null)
+				{
+					out.add(goalEntry(r, box));
+				}
+			}
+		}
+		onScreen.addAll(FarmRows.readyFirst(out, e -> e.ready));
+	}
+
+	/** One patch on the game screen: its crop, status, growth bar and "region · name · teleport". */
+	private GoalOverlay.Entry patchEntry(Routines.Patch p, long now, String box)
+	{
+		boolean ready = FarmRows.ready(p, now);
+		BufferedImage icon = p.itemId > 0 ? itemManager.getImage(p.itemId) : skillIcons.getSkillImage(Skill.FARMING, true);
+		StringBuilder tip = new StringBuilder(ColorUtil.wrapWithColorTag(Text.escapeJagex(p.region), TIP_TITLE))
+			.append(": ").append(Text.escapeJagex(FarmRows.title(p))).append(" (").append(FarmRows.status(p, now)).append(')');
+		if (!p.travel.isEmpty())
+		{
+			tip.append("</br>").append(Text.escapeJagex(p.travel));
+		}
+		if (!p.travelHow.isEmpty())
+		{
+			tip.append("</br>").append(Text.escapeJagex(p.travelHow));
+		}
+		return new GoalOverlay.Entry(box, icon, FarmRows.title(p), FarmRows.status(p, now), FarmRows.sub(p.region, p.name, p.travel),
+			ready ? 1 : p.progress, ready, tip.toString());
+	}
+
+	/** The Farming Guild contract on the game screen, whatever crop it is now. */
+	private GoalOverlay.Entry contractEntry(FarmGroups.ContractView v, String box)
+	{
+		BufferedImage icon = v.itemId > 0 ? itemManager.getImage(v.itemId) : skillIcons.getSkillImage(Skill.FARMING, true);
+		StringBuilder tip = new StringBuilder(ColorUtil.wrapWithColorTag(Text.escapeJagex(v.title), TIP_TITLE))
+			.append("</br>").append(Text.escapeJagex(v.value));
+		if (!v.sub.isEmpty())
+		{
+			tip.append("</br>").append(Text.escapeJagex(v.sub));
+		}
+		return new GoalOverlay.Entry(box, icon, v.title, v.value, v.sub, v.progress, v.ready, tip.toString());
+	}
+
+	/** One daily task on the game screen: Due (in green), or when it resets. */
+	private static GoalOverlay.Entry dailyEntry(Routines.Daily d, long at, long now, String box)
+	{
+		boolean due = at <= now;
+		String tip = ColorUtil.wrapWithColorTag(Text.escapeJagex(d.label), TIP_TITLE) + (d.how.isEmpty() ? "" : "</br>" + Text.escapeJagex(d.how));
+		return new GoalOverlay.Entry(box, calendarIcon(), d.label, due ? "Due" : "Resets in " + Routines.left(at - now), d.how, -1, due, tip);
 	}
 
 	/** One kind of patch on screen: ready count (or time to the next), and the run in order with each stop's teleport. */
@@ -571,11 +750,11 @@ class GoalTracker
 		Routines.Patch next = null;
 		for (Routines.Patch p : ps)
 		{
-			if (p.readyAt(now))
+			if (FarmRows.ready(p, now))
 			{
 				ready.add(p);
 			}
-			else if (p.readyAt > 0 && (next == null || p.readyAt < next.readyAt))
+			else if (p.readyAt > now && (next == null || p.readyAt < next.readyAt))
 			{
 				next = p;
 			}
@@ -609,7 +788,7 @@ class GoalTracker
 		BufferedImage icon = ps.get(0).itemId > 0 ? itemManager.getImage(ps.get(0).itemId) : skillIcons.getSkillImage(Skill.FARMING, true);
 		String value = !ready.isEmpty() ? ready.size() + " ready" : next == null ? "Growing" : Routines.left(next.readyAt - now);
 		String detail = route.length() > 0 ? route.toString() : next == null ? "" : "Next: " + next.region;
-		return new GoalOverlay.Entry(icon, kind, value, detail, (double) ready.size() / ps.size(), !ready.isEmpty(), tip.toString());
+		return new GoalOverlay.Entry(kind, icon, kind, value, detail, (double) ready.size() / ps.size(), !ready.isEmpty(), tip.toString());
 	}
 
 	/** A daily task that's just been done: the same pop-up and chat line as a goal. */
