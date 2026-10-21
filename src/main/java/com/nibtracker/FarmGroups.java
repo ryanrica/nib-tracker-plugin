@@ -162,6 +162,12 @@ final class FarmGroups
 		return t;
 	}
 
+	/** How far along a contract crop is, best first: ready, then growing, then diseased or dead. */
+	private static int stage(Routines.Patch p, long now)
+	{
+		return p.needsAttention() ? 2 : p.readyAt(now) || "ready".equals(p.state) ? 0 : 1;
+	}
+
 	static ContractView contractView(Contract c, List<Routines.Patch> farm, long now)
 	{
 		ContractView v = new ContractView();
@@ -174,24 +180,37 @@ final class FarmGroups
 		v.title = "Contract: " + c.crop + " · Farming Guild " + c.kind.replace('_', ' ') + " patch";
 		v.itemId = c.itemId;
 
+		// The guild has two allotments (North and South), so look at every patch of the contract's kind: the contract crop
+		// if one has it (the most advanced), else an empty one, and "Other crop planted" only when all hold something else.
 		Routines.Patch p = null;
+		boolean empty = false;
 		for (Routines.Patch q : farm)
 		{
-			if (GUILD.equals(q.region) && c.kind.equals(q.kind))
+			if (!GUILD.equals(q.region) || !c.kind.equals(q.kind))
+			{
+				continue;
+			}
+			if ("empty".equals(q.state))
+			{
+				empty = true;
+			}
+			else if (sameCrop(q.crop, c.crop) && (p == null || stage(q, now) < stage(p, now)))
 			{
 				p = q;
-				break;
 			}
 		}
-		if (p == null || "empty".equals(p.state))
+		if (p == null)
 		{
-			v.value = "Not planted";
-			v.sub = "Harvested? See Jane for a new contract";
-			return v;
-		}
-		if (!sameCrop(p.crop, c.crop))
-		{
-			v.value = "Other crop planted";
+			boolean any = farm.stream().anyMatch(q -> GUILD.equals(q.region) && c.kind.equals(q.kind));
+			if (!any || empty)
+			{
+				v.value = "Not planted";
+				v.sub = "Harvested? See Jane for a new contract";
+			}
+			else
+			{
+				v.value = "Other crop planted";
+			}
 			return v;
 		}
 		v.progress = p.progress;
@@ -209,6 +228,7 @@ final class FarmGroups
 		{
 			v.ready = true;
 			v.value = "Ready · then see Jane for a new contract";
+			v.progress = 1;
 		}
 		else if (p.readyAt > now)
 		{

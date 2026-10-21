@@ -101,6 +101,44 @@ public class FarmGroupsTest
 		assertEquals("Not planted", view(ranarr(), guild("tree", "Oak", "growing", 0)).value);
 	}
 
+	private static Routines.Patch allotment(String name, String crop, String state, long readyAt)
+	{
+		Routines.Patch p = new Routines.Patch("Farming Guild", name, "Allotment", crop, 0, readyAt, "ready".equals(state));
+		p.kind = "allotment";
+		p.state = state;
+		return p;
+	}
+
+	@Test
+	public void contractCropInTheSecondAllotment()
+	{
+		FarmGroups.Contract potato = FarmGroups.contract(ItemID.POTATO);
+		Routines.Patch south = allotment("South", "Potatoes", "growing", NOW + 90 * MIN);
+		south.progress = 0.4;
+		FarmGroups.ContractView v = view(potato, allotment("North", "Onions", "growing", NOW + MIN), south);
+		assertEquals("1h 30m", v.value);
+		assertEquals(0.4, v.progress, 0.0001);
+		assertEquals("1h 30m", view(potato, allotment("North", "", "empty", 0), south).value);
+		// The more advanced of two matching crops wins: ready over growing over diseased.
+		FarmGroups.ContractView ready = view(potato, allotment("North", "Potatoes", "diseased", 0),
+			south, allotment("South", "Potatoes", "ready", 0));
+		assertTrue(ready.ready);
+		assertEquals("Ready · then see Jane for a new contract", ready.value);
+		assertEquals(1, ready.progress, 0.0001);
+		assertEquals("1h 30m", view(potato, allotment("North", "Potatoes", "diseased", 0), south).value);
+	}
+
+	@Test
+	public void contractEmptyAllotmentBeatsOtherCrop()
+	{
+		FarmGroups.Contract potato = FarmGroups.contract(ItemID.POTATO);
+		FarmGroups.ContractView v = view(potato, allotment("North", "Onions", "growing", NOW + MIN), allotment("South", "", "empty", 0));
+		assertEquals("Not planted", v.value);
+		assertEquals("Harvested? See Jane for a new contract", v.sub);
+		assertEquals("Other crop planted", view(potato, allotment("North", "Onions", "growing", NOW + MIN),
+			allotment("South", "Cabbages", "growing", NOW + MIN)).value);
+	}
+
 	@Test
 	public void diseasedNeedsAttention()
 	{
