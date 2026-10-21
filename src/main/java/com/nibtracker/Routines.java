@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -18,6 +19,8 @@ final class Routines
 
 	static final long MINUTE = 60_000L;
 	static final long DAY = 24 * 60 * MINUTE;
+	/* The patch states Nib Tracker sends. Anything else falls back to ready or growing. */
+	private static final List<String> STATES = Arrays.asList("empty", "growing", "ready", "diseased", "dead", "unknown");
 
 	/** A daily task switched on in Nib Tracker. dueAt is when it's next due (epoch ms), or 0 when it's due now. */
 	static final class Daily
@@ -61,6 +64,10 @@ final class Routines
 		int order;
 		String travelCat = "";
 		String travelItem = "";
+		/* empty, growing, ready, diseased, dead or unknown, from Nib Tracker; "growing" or "ready" when the feed has none. */
+		String state;
+		/* How far it has grown, 0 to 1; -1 when unknown. */
+		double progress = -1;
 
 		Patch(String region, String name, String type, String crop, int itemId, long readyAt, boolean ready)
 		{
@@ -71,11 +78,24 @@ final class Routines
 			this.itemId = itemId;
 			this.readyAt = readyAt;
 			this.ready = ready;
+			this.state = ready ? "ready" : "growing";
 		}
 
 		boolean readyAt(long now)
 		{
 			return ready || (readyAt > 0 && readyAt <= now);
+		}
+
+		/** True when it's diseased or dead and needs a visit. */
+		boolean needsAttention()
+		{
+			return "diseased".equals(state) || "dead".equals(state);
+		}
+
+		/** Which patch this is: region, name and kind. */
+		String id()
+		{
+			return region + "|" + name + "|" + kind;
 		}
 	}
 
@@ -113,6 +133,15 @@ final class Routines
 				p.order = (int) num(o, "order");
 				p.travelCat = str(o, "travelCat");
 				p.travelItem = str(o, "travelItem");
+				String state = str(o, "state");
+				if (STATES.contains(state))
+				{
+					p.state = state;
+				}
+				if (o.has("progress") && o.get("progress").isJsonPrimitive() && o.get("progress").getAsJsonPrimitive().isNumber())
+				{
+					p.progress = Math.max(0, Math.min(1, num(o, "progress")));
+				}
 				out.add(p);
 			}
 		}

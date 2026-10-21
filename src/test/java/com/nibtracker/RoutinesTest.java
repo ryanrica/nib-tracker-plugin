@@ -27,6 +27,28 @@ public class RoutinesTest
 	}
 
 	@Test
+	public void feedWithoutStateIsGrowingOrReady()
+	{
+		List<Routines.Patch> f = Routines.farm(new JsonParser().parse(
+			"[{\"region\":\"Catherby\",\"crop\":\"Ranarr\",\"ready\":true},{\"region\":\"Ardougne\",\"crop\":\"Guam\"}]"));
+		assertEquals("ready", f.get(0).state);
+		assertEquals("growing", f.get(1).state);
+		assertEquals(-1, f.get(1).progress, 0);
+	}
+
+	@Test
+	public void readsStateProgressAndId()
+	{
+		Routines.Patch p = Routines.farm(new JsonParser().parse(
+			"[{\"region\":\"Farming Guild\",\"name\":\"\",\"kind\":\"anima\",\"state\":\"diseased\",\"progress\":0.5}]")).get(0);
+		assertEquals("diseased", p.state);
+		assertEquals(0.5, p.progress, 0);
+		assertTrue(p.needsAttention());
+		assertEquals("Farming Guild||anima", p.id());
+		assertFalse(p.readyAt(Long.MAX_VALUE)); // no readyAt, not ready
+	}
+
+	@Test
 	public void nextDueFollowsTheCadence()
 	{
 		Routines.Daily daily = new Routines.Daily("a", "x", "daily", 1, 0);
