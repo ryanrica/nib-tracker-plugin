@@ -326,7 +326,7 @@ class GoalsPanel extends PluginPanel
 			// each with its crop's icon.
 			List<String> kinds = new ArrayList<>();
 			Map<String, Integer> kindIcons = new HashMap<>();
-			for (PatchView p : shownPatches(extras))
+			for (PatchView p : extras.patches)
 			{
 				if (!p.kindLabel.isEmpty() && !kinds.contains(p.kindLabel) && !FARM_GROUPS.contains(p.kindLabel))
 				{
@@ -346,7 +346,7 @@ class GoalsPanel extends PluginPanel
 			Map<String, Icon> fixed = new HashMap<>();
 			fixed.put(ALL_PATCHES, farmingIcon(14));
 			fixed.put(FAVOURITES, new Glyph(true, true));
-			filters(chips, kindIcons, fixed);
+			filters(chips, kindIcons, fixed, farmDefault(extras));
 			farmingView(extras);
 		}
 		else
@@ -453,19 +453,19 @@ class GoalsPanel extends PluginPanel
 	/** The sub-filters for the current view (tiers, quest state, patch type...), as small clickable chips. */
 	private void filters(List<String> options)
 	{
-		filters(options, Collections.emptyMap(), Collections.emptyMap());
+		filters(options, Collections.emptyMap(), Collections.emptyMap(), options.isEmpty() ? ALL : options.get(0));
 	}
 
 	/**
 	 * Sub-filter chips in a grid that wraps onto as many rows as it needs, so every option shows (farming has many patch
 	 * kinds). Chips can carry an item icon (a seed or crop for each patch kind) or a fixed one (the Farming skill, ★).
-	 * The first option is the default.
+	 * The given default is shown until a chip is picked; it isn't saved, so it can follow the data.
 	 */
-	private void filters(List<String> options, Map<String, Integer> iconItems, Map<String, Icon> fixedIcons)
+	private void filters(List<String> options, Map<String, Integer> iconItems, Map<String, Icon> fixedIcons, String byDefault)
 	{
 		filters.removeAll();
 		filters.setLayout(new GridLayout(0, iconItems.isEmpty() && fixedIcons.isEmpty() ? 3 : 2, 4, 4));
-		String first = options.isEmpty() ? ALL : options.get(0);
+		String first = options.contains(byDefault) ? byDefault : options.isEmpty() ? ALL : options.get(0);
 		String current = filter.getOrDefault(view, first);
 		if (!options.contains(current))
 		{
@@ -606,7 +606,7 @@ class GoalsPanel extends PluginPanel
 		boolean farmPinned;
 		final List<DailyView> dailies = new ArrayList<>();
 		/* Shown regions in order (soonest first) with their patches, and every patch on its own, hidden regions' too
-		   (Favourites shows those; the other views leave them out), ready first. */
+		   (hiding is for All patches only), ready first. */
 		final List<Region> regions = new ArrayList<>();
 		final List<PatchView> patches = new ArrayList<>();
 		/* Every region with a timer, shown or not, for the All patches picker. */
@@ -785,18 +785,10 @@ class GoalsPanel extends PluginPanel
 		return m;
 	}
 
-	/** Patches in regions that are shown; Favourites alone also shows hidden regions' patches. */
-	private static List<PatchView> shownPatches(Extras x)
+	/** The Farming chip shown until one is picked: the contract when there's no farm data but a contract, else All patches. */
+	private static String farmDefault(Extras x)
 	{
-		List<PatchView> out = new ArrayList<>();
-		for (PatchView p : x.patches)
-		{
-			if (!x.hiddenRegions.contains(p.region))
-			{
-				out.add(p);
-			}
-		}
-		return out;
+		return x.allRegions.isEmpty() && x.contract != null ? CONTRACT : ALL_PATCHES;
 	}
 
 	/** Overview's Farming section: the shown regions, soonest first, each folding open to its patches. */
@@ -819,7 +811,7 @@ class GoalsPanel extends PluginPanel
 	/** The Farming tab: the view its chip picks. Ready rows come first in each. */
 	private void farmingView(Extras x)
 	{
-		String f = filter.getOrDefault(FARMING, ALL_PATCHES);
+		String f = filter.getOrDefault(FARMING, farmDefault(x));
 		switch (f)
 		{
 			case ALL_PATCHES:
@@ -971,11 +963,11 @@ class GoalsPanel extends PluginPanel
 		}
 	}
 
-	/** Special or All trees: their patches in the shown regions, under a small heading per kind (Hespori, Calquat...). */
+	/** Special or All trees: their patches, hidden regions too (hiding is for All patches only), under a heading per kind. */
 	private void farmGroup(Extras x, String name, String pin, Predicate<String> kinds, String none)
 	{
 		List<PatchView> ps = new ArrayList<>();
-		for (PatchView p : shownPatches(x))
+		for (PatchView p : x.patches)
 		{
 			if (kinds.test(p.kind))
 			{
@@ -1189,7 +1181,7 @@ class GoalsPanel extends PluginPanel
 	private void runOrder(Extras x, String label)
 	{
 		List<PatchView> ps = new ArrayList<>();
-		for (PatchView p : shownPatches(x))
+		for (PatchView p : x.patches)
 		{
 			if (label.equals(p.kindLabel))
 			{
@@ -1244,7 +1236,7 @@ class GoalsPanel extends PluginPanel
 		}
 		if (ps.isEmpty())
 		{
-			list.add(note("Nothing here in the shown regions."));
+			list.add(note("No patches of this kind."));
 		}
 	}
 

@@ -471,7 +471,7 @@ class GoalTracker
 		regions.sort(Comparator.comparingLong(e -> soonest(e.getValue(), now)));
 		List<Routines.Patch> readyNow = new ArrayList<>();
 		Routines.Patch next = null;
-		// Every patch goes in x.patches (Favourites shows hidden regions too); only shown regions go in x.regions.
+		// Every patch goes in x.patches (hiding is for All patches only); only shown regions go in x.regions.
 		for (Map.Entry<String, List<Routines.Patch>> e : regions)
 		{
 			List<Routines.Patch> ps = new ArrayList<>(e.getValue());
