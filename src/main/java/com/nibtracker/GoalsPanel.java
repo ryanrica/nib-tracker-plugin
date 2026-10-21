@@ -9,7 +9,9 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
+import java.awt.Point;
 import java.awt.RenderingHints;
+import java.awt.geom.Path2D;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
@@ -23,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
@@ -107,6 +110,34 @@ class GoalsPanel extends PluginPanel
 		}
 	}
 
+	/**
+	 * One row as the panel draws it, the same shape on every tab: an icon, the title with its value on the right, an
+	 * optional bar (progress >= 0) and a quieter second line, a coloured strip on the left, and ★ / ▣ on the right.
+	 */
+	static final class Card
+	{
+		/* Its favourite id and the tab that favourite is saved under (null: no ★), and its game-screen pin (null: no ▣). */
+		String id = "";
+		String favTab;
+		String pinId;
+		/* Puts the row's real icon in the 28px slot (a goal's skill or item, a crop, the calendar); null leaves it empty. */
+		Consumer<JLabel> icon;
+		String title = "";
+		Color titleColour = Color.WHITE;
+		String value = "";
+		Color valueColour = MUTED;
+		double progress = -1;
+		boolean barDone;
+		String sub = "";
+		Color subColour = MUTED;
+		String tooltip;
+		Color edge = UNKNOWN;
+		boolean fav;
+		boolean pinned;
+		JPopupMenu menu;
+		Runnable click;
+	}
+
 	/* Each section shows this many goals until "Show more" is clicked. */
 	private static final int SECTION_LIMIT = 6;
 	private static final String COMPLETED = "Completed";
@@ -142,6 +173,8 @@ class GoalsPanel extends PluginPanel
 	private final Set<String> expanded = new HashSet<>();
 	/* Called with a goal's id when it's put on or taken off the game screen. */
 	private Consumer<String> onPin = id -> { };
+	/* Called with a row's home tab and its id when its ★ is clicked. */
+	private BiConsumer<String, String> onFavourite = (tab, id) -> { };
 	/* Called with a daily task's id when it's ticked off, and with a region when it's shown or hidden. */
 	private Consumer<String> onDailyDone = id -> { };
 	private Consumer<String> onRegion = region -> { };
@@ -458,6 +491,36 @@ class GoalsPanel extends PluginPanel
 		}
 		filters(tags);
 		String f = currentFilter();
+		// This tab's favourites first, whatever the sub-filter: each favourited goal, main goal or part, on its own.
+		Set<String> favs = favourites(category);
+		if (!favs.isEmpty())
+		{
+			List<Card> cards = new ArrayList<>();
+			List<GoalLayout.Group> all = new ArrayList<>(open);
+			all.addAll(finished);
+			for (GoalLayout.Group g : all)
+			{
+				if (favs.contains(g.main.id))
+				{
+					cards.add(mainCard(g));
+				}
+				for (Row x : g.extras)
+				{
+					if (favs.contains(x.id))
+					{
+						cards.add(goalCard(x, x.progress, x.detail));
+					}
+				}
+				for (Row x : g.parts)
+				{
+					if (favs.contains(x.id))
+					{
+						cards.add(goalCard(x, x.progress, x.detail));
+					}
+				}
+			}
+			favouritesSection(category, cards);
+		}
 		for (GoalLayout.Group g : open)
 		{
 			if (ALL.equals(f) || f.equals(g.main.tag))
@@ -503,6 +566,9 @@ class GoalsPanel extends PluginPanel
 		final Set<String> hiddenRegions = new HashSet<>();
 		/* Patch kinds (Herbs...) shown on the game screen. */
 		final Set<String> pinnedKinds = new HashSet<>();
+		/* Each tab's favourite row ids, and everything on the game screen (goal ids, "daily:<id>", group pins). */
+		final Map<String, Set<String>> favourites = new HashMap<>();
+		final Set<String> pins = new HashSet<>();
 	}
 
 	static final class DailyView
@@ -586,18 +652,68 @@ class GoalsPanel extends PluginPanel
 				return;
 			}
 		}
+		else
+		{
+			Set<String> favs = favourites(DAILIES);
+			List<Card> cards = new ArrayList<>();
+			for (DailyView d : x.dailies)
+			{
+				if (favs.contains(d.id))
+				{
+					cards.add(dailyCard(x, d, false));
+				}
+			}
+			favouritesSection(DAILIES, cards);
+		}
 		for (DailyView d : x.dailies)
 		{
 			if ("Due".equals(f) && !d.due || "Done".equals(f) && d.due)
 			{
 				continue;
 			}
-			JComponent line = line(null, d.label, d.status, overview || d.how.isEmpty() ? null : d.how, d.due ? AMBER : DONE, 0);
-			line.setToolTipText(d.how.isEmpty() ? null : "<html>" + escape(d.label) + "<br>" + escape(d.how) + "</html>");
-			line.setComponentPopupMenu(dailiesMenu(x, d));
-			inheritMenu(line);
-			list.add(line);
+			list.add(card(dailyCard(x, d, overview), 0));
 		}
+	}
+
+	/** A daily task as a row: the calendar icon, its status, how to do it (on its own tab), ★ and ▣ for just this task. */
+	private Card dailyCard(Extras x, DailyView d, boolean overview)
+	{
+		Card c = new Card();
+		c.id = d.id;
+		c.favTab = DAILIES;
+		c.pinId = Favourites.dailyPin(d.id);
+		c.fav = favourites(DAILIES).contains(d.id);
+		c.pinned = x.pins.contains(c.pinId);
+		// Dailies carry no item of their own, so each has the calendar, as the Daily tasks tab does.
+		c.icon = l -> l.setIcon(icons.computeIfAbsent("calendar", k -> new ImageIcon(fit(GoalTracker.calendarIcon()))));
+		c.title = d.label;
+		c.value = d.status;
+		c.edge = d.due ? AMBER : DONE;
+		c.valueColour = d.due ? MUTED : DONE;
+		c.sub = overview ? "" : d.how;
+		c.tooltip = d.how.isEmpty() ? null : "<html>" + escape(d.label) + "<br>" + escape(d.how) + "</html>";
+		c.menu = dailiesMenu(x, d);
+		return c;
+	}
+
+	/** This tab's favourites, as a ★ FAVOURITES section at the top of the tab (nothing when it has none). */
+	private void favouritesSection(String tab, List<Card> cards)
+	{
+		if (cards.isEmpty())
+		{
+			return;
+		}
+		String key = "fav:" + tab;
+		list.add(sectionHeader(key, "Favourites", cards.size(), new Glyph(true, true)));
+		if (!collapsed.contains(key))
+		{
+			cards.forEach(c -> list.add(card(c, 0)));
+		}
+	}
+
+	private Set<String> favourites(String tab)
+	{
+		return lastExtras.favourites.getOrDefault(tab, Collections.emptySet());
 	}
 
 	private JPopupMenu dailiesMenu(Extras x, DailyView d)
@@ -642,26 +758,25 @@ class GoalsPanel extends PluginPanel
 		{
 			String key = "farm:" + r.name;
 			boolean open = expanded.contains(key);
-			JComponent row = line(null, (open ? "– " : "+ ") + r.name, r.summary, null, r.anyReady ? DONE : AMBER, 0);
-			row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-			onClick(row, () -> {
+			// The region's icon is its soonest patch's crop.
+			Card row = simpleCard(r.patches.isEmpty() ? 0 : r.patches.get(0).itemId, (open ? "– " : "+ ") + r.name, r.summary, r.anyReady ? DONE : AMBER);
+			row.click = () -> {
 				if (!expanded.remove(key))
 				{
 					expanded.add(key);
 				}
 				redraw();
-			});
+			};
 			JPopupMenu m = regionsMenu(x);
 			m.insert(item("Hide " + r.name, () -> onRegion.accept(r.name)), 0);
-			row.setComponentPopupMenu(m);
-			inheritMenu(row);
-			list.add(row);
+			row.menu = m;
+			list.add(card(row, 0));
 			if (open)
 			{
 				String travel = r.patches.stream().map(p -> p.travel).filter(t -> !t.isEmpty()).findFirst().orElse("");
 				for (PatchView p : r.patches)
 				{
-					list.add(line(p.itemId, p.crop + (p.type.isEmpty() ? "" : " (" + p.type + ")"), p.status, null, p.ready ? DONE : AMBER, PART_INDENT));
+					list.add(card(simpleCard(p.itemId, p.crop + (p.type.isEmpty() ? "" : " (" + p.type + ")"), p.status, p.ready ? DONE : AMBER), PART_INDENT));
 				}
 				if (!travel.isEmpty())
 				{
@@ -698,13 +813,13 @@ class GoalsPanel extends PluginPanel
 		long ready = ps.stream().filter(p -> p.ready).count();
 		boolean pinned = x.pinnedKinds.contains(kind);
 		Runnable pin = () -> onPin.accept(GoalTracker.FARMING + ":" + kind);
-		JComponent head = line(null, "Run order  ·  " + stops.size() + (stops.size() == 1 ? " stop" : " stops"), ready > 0 ? ready + " ready" : "Growing", null, ready > 0 ? DONE : AMBER, 0);
+		Card head = simpleCard(0, "Run order  ·  " + stops.size() + (stops.size() == 1 ? " stop" : " stops"), ready > 0 ? ready + " ready" : "Growing", ready > 0 ? DONE : AMBER);
+		head.icon = l -> l.setIcon(icons.computeIfAbsent("skill:FARMING", k -> new ImageIcon(fit(skillIcons.getSkillImage(Skill.FARMING, false)))));
 		JPopupMenu headMenu = new JPopupMenu();
 		headMenu.add(item(pinned ? "Remove " + kind + " from game screen" : "Show " + kind + " on game screen", pin));
-		head.setComponentPopupMenu(headMenu);
-		head.setToolTipText("Right-click to " + (pinned ? "remove " + kind + " from" : "show " + kind + " on") + " the game screen");
-		inheritMenu(head);
-		list.add(head);
+		head.menu = headMenu;
+		head.tooltip = "Right-click to " + (pinned ? "remove " + kind + " from" : "show " + kind + " on") + " the game screen";
+		list.add(card(head, 0));
 		int n = 0;
 		for (List<PatchView> stop : stops.values())
 		{
@@ -712,12 +827,11 @@ class GoalsPanel extends PluginPanel
 			PatchView first = stop.get(0);
 			long r = stop.stream().filter(p -> p.ready).count();
 			String status = r > 0 ? r + " ready" : stop.stream().map(p -> p.status).min(Comparator.comparingInt(String::length).thenComparing(s -> s)).orElse("");
-			JComponent row = line(null, n + "   " + first.region, status, null, r > 0 ? DONE : AMBER, 0);
+			Card row = simpleCard(first.itemId, n + "   " + first.region, status, r > 0 ? DONE : AMBER);
 			JPopupMenu m = new JPopupMenu();
 			m.add(item(pinned ? "Remove " + kind + " from game screen" : "Show " + kind + " on game screen", pin));
-			row.setComponentPopupMenu(m);
-			inheritMenu(row);
-			list.add(row);
+			row.menu = m;
+			list.add(card(row, 0));
 			if (!first.travel.isEmpty())
 			{
 				JLabel t = new JLabel(first.travel);
@@ -731,7 +845,7 @@ class GoalsPanel extends PluginPanel
 			}
 			for (PatchView p : stop)
 			{
-				list.add(line(p.itemId, p.crop, p.status, null, p.ready ? DONE : AMBER, PART_INDENT));
+				list.add(card(simpleCard(p.itemId, p.crop, p.status, p.ready ? DONE : AMBER), PART_INDENT));
 			}
 		}
 	}
@@ -814,49 +928,19 @@ class GoalsPanel extends PluginPanel
 		return l;
 	}
 
-	/** A compact row: optional item icon, a label, a status on the right, an optional muted line under it, a coloured edge. */
-	private JComponent line(Integer itemId, String label, String status, String sub, Color edge, int indent)
+	/** A plain row (a farm region, patch or run stop): an item's icon, a title, a status on the right, a coloured edge. */
+	private Card simpleCard(int itemId, String title, String value, Color edge)
 	{
-		JPanel p = new JPanel(new BorderLayout(6, 0));
-		p.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		p.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 3, 0, 0, edge), new EmptyBorder(5, 6, 5, 8)));
-		if (itemId != null && itemId > 0 && itemManager != null)
+		Card c = new Card();
+		if (itemId > 0 && itemManager != null)
 		{
-			JLabel icon = new JLabel();
-			icon.setPreferredSize(new Dimension(18, 16));
-			AsyncBufferedImage img = itemManager.getImage(itemId);
-			onLoaded(img, () -> icon.setIcon(new ImageIcon(ImageUtil.resizeImage(img, 18, 16, true))));
-			p.add(icon, BorderLayout.WEST);
+			c.icon = l -> itemIcon(itemId, ICON, l::setIcon);
 		}
-		JPanel text = new JPanel(new DynamicGridLayout(0, 1, 0, 2));
-		text.setOpaque(false);
-		JPanel top = new JPanel(new BorderLayout(6, 0));
-		top.setOpaque(false);
-		JLabel l = new JLabel(label);
-		l.setFont(FontManager.getRunescapeSmallFont());
-		l.setForeground(Color.WHITE);
-		JLabel s = new JLabel(status);
-		s.setFont(FontManager.getRunescapeSmallFont());
-		s.setForeground(edge == DONE ? DONE : MUTED);
-		top.add(l, BorderLayout.CENTER);
-		top.add(s, BorderLayout.EAST);
-		text.add(top);
-		if (sub != null && !sub.isEmpty())
-		{
-			JLabel u = new JLabel("<html><div style='width:" + (HINT_WIDTH - indent) + "px'>" + escape(sub) + "</div></html>");
-			u.setFont(FontManager.getRunescapeSmallFont());
-			u.setForeground(MUTED);
-			text.add(u);
-		}
-		p.add(text, BorderLayout.CENTER);
-		if (indent == 0)
-		{
-			return p;
-		}
-		JPanel wrap = new JPanel(new BorderLayout());
-		wrap.setBorder(new EmptyBorder(0, indent, 0, 0));
-		wrap.add(p);
-		return wrap;
+		c.title = title;
+		c.value = value;
+		c.edge = edge;
+		c.valueColour = edge == DONE ? DONE : MUTED;
+		return c;
 	}
 
 	/** A section: its heading, then its goals (the first few until "Show more"). */
@@ -888,11 +972,10 @@ class GoalsPanel extends PluginPanel
 	private void group(GoalLayout.Group g)
 	{
 		int partsDone = g.partsDone(), partsTotal = g.partsTotal();
-		String detail = g.main.progress < 0 && partsTotal > 0 && !g.main.done ? partsDone + " / " + partsTotal : g.main.detail;
-		list.add(row(g.main, g.progress(), detail, 0));
+		list.add(card(mainCard(g), 0));
 		for (Row x : g.extras)
 		{
-			list.add(row(x, x.progress, x.detail, PART_INDENT));
+			list.add(card(goalCard(x, x.progress, x.detail), PART_INDENT));
 		}
 		if (g.parts.isEmpty())
 		{
@@ -909,9 +992,17 @@ class GoalsPanel extends PluginPanel
 		{
 			for (Row p : g.parts)
 			{
-				list.add(row(p, p.progress, p.detail, PART_INDENT));
+				list.add(card(goalCard(p, p.progress, p.detail), PART_INDENT));
 			}
 		}
+	}
+
+	/** A main goal's row, measured by its parts when it has them ("3 / 5" for a yes/no goal with parts). */
+	private Card mainCard(GoalLayout.Group g)
+	{
+		int partsDone = g.partsDone(), partsTotal = g.partsTotal();
+		String detail = g.main.progress < 0 && partsTotal > 0 && !g.main.done ? partsDone + " / " + partsTotal : g.main.detail;
+		return goalCard(g.main, g.progress(), detail);
 	}
 
 	/** A small clickable line ("+ 23 parts", "Show 4 more") that changes what's shown. */
@@ -931,42 +1022,111 @@ class GoalsPanel extends PluginPanel
 
 	private JComponent sectionHeader(String name, int count)
 	{
-		boolean shut = collapsed.contains(name);
+		return sectionHeader(name, name, count, null);
+	}
+
+	/** A section's heading, folded by key; an icon (the ★ for Favourites) goes between the fold sign and the name. */
+	private JComponent sectionHeader(String key, String name, int count, Icon icon)
+	{
+		boolean shut = collapsed.contains(key);
 		JPanel p = new JPanel(new BorderLayout());
 		p.setBorder(new EmptyBorder(6, 2, 2, 2));
 		JLabel l = new JLabel((shut ? "+ " : "– ") + name.toUpperCase());
 		l.setFont(FontManager.getRunescapeSmallFont());
 		l.setForeground(COMPLETED.equals(name) ? DONE : HEADING);
+		JComponent title = l;
+		if (icon != null)
+		{
+			// The icon is drawn, not a font glyph: the RuneScape fonts have no ★.
+			l.setText(shut ? "+ " : "– ");
+			JLabel named = new JLabel(name.toUpperCase(), icon, SwingConstants.LEADING);
+			named.setFont(l.getFont());
+			named.setForeground(l.getForeground());
+			named.setIconTextGap(3);
+			JPanel both = new JPanel(new BorderLayout());
+			both.setOpaque(false);
+			both.add(l, BorderLayout.WEST);
+			both.add(named, BorderLayout.CENTER);
+			title = both;
+		}
 		JLabel n = new JLabel(String.valueOf(count));
 		n.setFont(FontManager.getRunescapeSmallFont());
 		n.setForeground(MUTED);
-		p.add(l, BorderLayout.WEST);
+		p.add(title, BorderLayout.WEST);
 		p.add(n, BorderLayout.EAST);
 		p.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		p.setToolTipText(shut ? "Show " + name.toLowerCase() : "Hide " + name.toLowerCase());
 		onClick(p, () -> {
-			if (!collapsed.remove(name))
+			if (!collapsed.remove(key))
 			{
-				collapsed.add(name);
+				collapsed.add(key);
 			}
 			redraw();
 		});
 		return p;
 	}
 
-	/** One goal. progress and detail can differ from the row's own (a main goal measured by its parts); parts are indented. */
-	private JComponent row(Row r, double progress, String detail, int indent)
+	/** One goal as a row. progress and detail can differ from the row's own (a main goal measured by its parts). */
+	private Card goalCard(Row r, double progress, String detail)
+	{
+		Card c = new Card();
+		c.id = r.id;
+		// Its ★ saves under the goal's own tab, also when clicked in Overview.
+		c.favTab = r.category;
+		c.pinId = r.id;
+		c.fav = favourites(r.category).contains(r.id);
+		c.pinned = r.pinned;
+		c.icon = l -> icon(r, l);
+		c.title = r.title;
+		c.titleColour = r.done ? MUTED : Color.WHITE;
+		c.value = r.done ? "Done" : detail;
+		c.valueColour = r.done ? DONE : progress < 0 ? MUTED : colour(progress).brighter();
+		c.edge = r.done ? DONE : colour(progress);
+		// Quests are done or not: their state is the value, with no bar or percentage.
+		boolean measured = progress >= 0 && !("Quests".equals(r.category) && r.partsTotal == 0);
+		c.progress = r.done ? 1 : measured ? progress : -1;
+		c.barDone = r.done;
+		String hint = r.done ? (r.points > 0 ? "+" + r.points + " points" : "") : r.hint;
+		String text = r.done || !measured ? hint : hint.isEmpty() ? Math.round(progress * 100) + "%"
+			: hint + "  ·  " + Math.round(progress * 100) + "%";
+		if (r.pinned)
+		{
+			text = text.isEmpty() ? "On screen" : text + "  ·  On screen";
+		}
+		c.sub = text;
+		c.subColour = r.done ? DONE.darker() : MUTED;
+		c.tooltip = "<html>" + escape(r.title) + (r.link == null ? "" : r.link.startsWith(GoalTracker.WIKI) ? "<br>Click for the OSRS Wiki" : "<br>Click to open it in Nib Tracker")
+			+ "<br>Right-click to " + (r.pinned ? "remove it from" : "show it on") + " the game screen</html>";
+		// Right-click: show this goal on the game screen, or take it off.
+		JPopupMenu menu = new JPopupMenu();
+		menu.add(item(r.pinned ? "Remove from game screen" : "Show on game screen", () -> onPin.accept(r.id)));
+		c.menu = menu;
+		if (r.link != null)
+		{
+			c.click = () -> LinkBrowser.browse(r.link);
+		}
+		return c;
+	}
+
+	/**
+	 * One row, drawn the same on every tab: the icon in a 28px slot (left empty when there's none, so rows line up), the
+	 * title with its value and then ★ and ▣ on the right, the bar when there's progress, and the muted second line.
+	 */
+	private JComponent card(Card c, int indent)
 	{
 		JPanel p = new JPanel(new BorderLayout(8, 0));
 		p.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		p.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createMatteBorder(0, 3, 0, 0, r.done ? DONE : colour(progress)),
+			BorderFactory.createMatteBorder(0, 3, 0, 0, c.edge),
 			new EmptyBorder(6, 6, 6, 8)));
 
 		JLabel icon = new JLabel();
 		icon.setPreferredSize(new Dimension(ICON, ICON));
 		icon.setHorizontalAlignment(SwingConstants.CENTER);
-		icon(r, icon);
+		if (c.icon != null)
+		{
+			c.icon.accept(icon);
+		}
 		p.add(icon, BorderLayout.WEST);
 
 		JPanel body = new JPanel(new DynamicGridLayout(0, 1, 0, 3));
@@ -974,57 +1134,58 @@ class GoalsPanel extends PluginPanel
 
 		JPanel line = new JPanel(new BorderLayout(6, 0));
 		line.setOpaque(false);
-		JLabel title = new JLabel(r.title);
+		JLabel title = new JLabel(c.title);
 		title.setFont(FontManager.getRunescapeSmallFont());
-		title.setForeground(r.done ? MUTED : Color.WHITE);
-		JLabel value = new JLabel(r.done ? "Done" : detail);
+		title.setForeground(c.titleColour);
+		JLabel value = new JLabel(c.value);
 		value.setFont(FontManager.getRunescapeSmallFont());
-		value.setForeground(r.done ? DONE : progress < 0 ? MUTED : colour(progress).brighter());
+		value.setForeground(c.valueColour);
+		JLabel star = glyph(true, c.fav, "Add to favourites", "Remove from favourites",
+			c.favTab == null ? null : () -> onFavourite.accept(c.favTab, c.id));
+		JLabel pin = glyph(false, c.pinned, "Show on game screen", "Remove from game screen",
+			c.pinId == null ? null : () -> onPin.accept(c.pinId));
+		JPanel glyphs = new JPanel(new GridLayout(1, 2, 2, 0));
+		glyphs.setOpaque(false);
+		glyphs.add(star);
+		glyphs.add(pin);
+		JPanel right = new JPanel(new BorderLayout(6, 0));
+		right.setOpaque(false);
+		right.add(value, BorderLayout.CENTER);
+		right.add(glyphs, BorderLayout.EAST);
 		line.add(title, BorderLayout.CENTER);
-		line.add(value, BorderLayout.EAST);
+		line.add(right, BorderLayout.EAST);
 		body.add(line);
 
-		// Quests are done or not: their state is the value, with no bar or percentage.
-		boolean measured = progress >= 0 && !("Quests".equals(r.category) && r.partsTotal == 0);
-		if (measured || r.done)
+		if (c.progress >= 0)
 		{
 			Bar bar = new Bar();
 			bar.setPreferredSize(new Dimension(0, 5));
-			bar.set(r.done ? 1 : progress, r.done);
+			bar.set(c.progress, c.barDone);
 			body.add(bar);
 		}
 
-		String hint = r.done ? (r.points > 0 ? "+" + r.points + " points" : "") : r.hint;
-		if (!hint.isEmpty() || (!r.done && measured) || r.pinned)
+		if (c.sub != null && !c.sub.isEmpty())
 		{
-			String text = r.done || !measured ? hint : hint.isEmpty() ? Math.round(progress * 100) + "%"
-				: hint + "  ·  " + Math.round(progress * 100) + "%";
-			if (r.pinned)
-			{
-				text = text.isEmpty() ? "On screen" : text + "  ·  On screen";
-			}
 			// Wraps to the row's width, so a task description is shown in full.
-			JLabel h = new JLabel("<html><div style='width:" + (HINT_WIDTH - indent) + "px'>" + escape(text) + "</div></html>");
+			JLabel h = new JLabel("<html><div style='width:" + (HINT_WIDTH - indent) + "px'>" + escape(c.sub) + "</div></html>");
 			h.setFont(FontManager.getRunescapeSmallFont());
-			h.setForeground(r.done ? DONE.darker() : MUTED);
+			h.setForeground(c.subColour);
 			body.add(h);
 		}
 		p.add(body, BorderLayout.CENTER);
 
-		p.setToolTipText("<html>" + escape(r.title) + (r.link == null ? "" : r.link.startsWith(GoalTracker.WIKI) ? "<br>Click for the OSRS Wiki" : "<br>Click to open it in Nib Tracker")
-			+ "<br>Right-click to " + (r.pinned ? "remove it from" : "show it on") + " the game screen</html>");
-		// Right-click: show this goal on the game screen, or take it off.
-		JPopupMenu menu = new JPopupMenu();
-		JMenuItem pin = new JMenuItem(r.pinned ? "Remove from game screen" : "Show on game screen");
-		pin.addActionListener(e -> onPin.accept(r.id));
-		menu.add(pin);
-		p.setComponentPopupMenu(menu);
-		inheritMenu(p);
-		if (r.link != null)
+		p.setToolTipText(c.tooltip);
+		if (c.menu != null)
+		{
+			p.setComponentPopupMenu(c.menu);
+			inheritMenu(p);
+		}
+		if (c.click != null)
 		{
 			p.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-			onClick(p, () -> LinkBrowser.browse(r.link));
-			p.addMouseListener(new MouseAdapter()
+			onClick(p, c.click);
+			// Moving onto ★ or ▣ (they take their own clicks) keeps the row lit; it goes out only on leaving the row.
+			MouseAdapter hover = new MouseAdapter()
 			{
 				@Override
 				public void mouseEntered(MouseEvent e)
@@ -1035,9 +1196,16 @@ class GoalsPanel extends PluginPanel
 				@Override
 				public void mouseExited(MouseEvent e)
 				{
-					p.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+					Point at = SwingUtilities.convertPoint(e.getComponent(), e.getPoint(), p);
+					if (!p.contains(at))
+					{
+						p.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+					}
 				}
-			});
+			};
+			p.addMouseListener(hover);
+			star.addMouseListener(hover);
+			pin.addMouseListener(hover);
 		}
 		if (indent == 0)
 		{
@@ -1047,6 +1215,48 @@ class GoalsPanel extends PluginPanel
 		wrap.setBorder(new EmptyBorder(0, indent, 0, 0));
 		wrap.add(p);
 		return wrap;
+	}
+
+	/**
+	 * ★ or ▣ at 14px, with its own tooltip. A click on it is its own (the row's click, its wiki link, doesn't fire) and
+	 * flips it at once; the redraw after the setting is saved agrees. With nothing to toggle, an empty space of the same
+	 * size, so values still line up.
+	 */
+	private static JLabel glyph(boolean star, boolean on, String addTip, String removeTip, Runnable toggle)
+	{
+		JLabel g = new JLabel();
+		g.setPreferredSize(new Dimension(14, 14));
+		g.setHorizontalAlignment(SwingConstants.CENTER);
+		if (toggle == null)
+		{
+			return g;
+		}
+		Glyph icon = new Glyph(star, on);
+		g.setIcon(icon);
+		g.setToolTipText(on ? removeTip : addTip);
+		g.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		g.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mousePressed(MouseEvent e)
+			{
+				e.consume();
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent e)
+			{
+				e.consume();
+				if (SwingUtilities.isLeftMouseButton(e) && g.contains(e.getPoint()))
+				{
+					icon.on = !icon.on;
+					g.setToolTipText(icon.on ? removeTip : addTip);
+					g.repaint();
+					SwingUtilities.invokeLater(toggle);
+				}
+			}
+		});
+		return g;
 	}
 
 	/** Skill icon, the item's own picture if it's a tradeable item, or a picture for the kind of goal. */
@@ -1103,6 +1313,12 @@ class GoalsPanel extends PluginPanel
 	void onPin(Consumer<String> onPin)
 	{
 		this.onPin = onPin;
+	}
+
+	/** Sets what happens when a row's ★ is clicked: called with the row's home tab and its id. */
+	void onFavourite(BiConsumer<String, String> onFavourite)
+	{
+		this.onFavourite = onFavourite;
 	}
 
 	void onDailyDone(Consumer<String> onDailyDone)
@@ -1259,6 +1475,66 @@ class GoalsPanel extends PluginPanel
 			{
 				g2.setColor(done ? DONE : colour(value));
 				g2.fillRoundRect(0, 0, Math.max(fill, h), h, h, h);
+			}
+			g2.dispose();
+		}
+	}
+
+	/** ★ or ▣ at 14px: orange when on, grey when off. Drawn rather than typed, as the RuneScape fonts have neither. */
+	private static final class Glyph implements Icon
+	{
+		private final boolean star;
+		boolean on;
+
+		Glyph(boolean star, boolean on)
+		{
+			this.star = star;
+			this.on = on;
+		}
+
+		@Override
+		public int getIconWidth()
+		{
+			return 14;
+		}
+
+		@Override
+		public int getIconHeight()
+		{
+			return 14;
+		}
+
+		@Override
+		public void paintIcon(Component c, Graphics g, int x, int y)
+		{
+			Graphics2D g2 = (Graphics2D) g.create();
+			g2.setColor(on ? ColorScheme.BRAND_ORANGE : UNKNOWN);
+			if (star)
+			{
+				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+				Path2D.Double s = new Path2D.Double();
+				for (int i = 0; i < 10; i++)
+				{
+					double r = i % 2 == 0 ? 6.5 : 2.7;
+					double a = -Math.PI / 2 + i * Math.PI / 5;
+					double px = x + 7 + r * Math.cos(a), py = y + 7.5 + r * Math.sin(a);
+					if (i == 0)
+					{
+						s.moveTo(px, py);
+					}
+					else
+					{
+						s.lineTo(px, py);
+					}
+				}
+				s.closePath();
+				g2.fill(s);
+			}
+			else
+			{
+				// A square in a square, kept crisp (no smoothing) at this size.
+				g2.drawRect(x + 1, y + 1, 11, 11);
+				g2.fillRect(x + 4, y + 4, 6, 6);
 			}
 			g2.dispose();
 		}

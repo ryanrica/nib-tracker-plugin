@@ -136,6 +136,7 @@ class GoalTracker
 		this.sink = sink;
 		this.panel = panel;
 		panel.onPin(this::togglePin);
+		panel.onFavourite(this::toggleFavourite);
 		panel.onDailyDone(this::dailyDone);
 		panel.onRegion(this::toggleRegion);
 		dirty = true;
@@ -150,6 +151,15 @@ class GoalTracker
 			pins.add(id);
 		}
 		configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.PINNED_GOALS, String.join(",", pins));
+		dirty = true;
+	}
+
+	/** Swing thread. Adds a row to its tab's favourites, or takes it off; remembered in the plugin's settings. */
+	void toggleFavourite(String tab, String id)
+	{
+		Map<String, Set<String>> favourites = Favourites.parse(config.favourites());
+		Favourites.toggle(favourites, tab, id);
+		configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.FAVOURITES, Favourites.write(favourites));
 		dirty = true;
 	}
 
@@ -385,6 +395,8 @@ class GoalTracker
 		x.farmOn = config.farmingPanel();
 		x.dailiesPinned = pins.contains(DAILIES);
 		x.farmPinned = pins.contains(FARMING);
+		x.pins.addAll(pins);
+		x.favourites.putAll(Favourites.parse(config.favourites()));
 
 		List<Routines.Daily> sorted = new ArrayList<>(dailies);
 		Map<String, Long> dueAt = new HashMap<>();
@@ -973,7 +985,7 @@ class GoalTracker
 				.append(r.parent).append(r.partsDone).append('/').append(r.partsTotal).append(r.pinned);
 		}
 		key.append('|').append(extras.dailiesOn).append(extras.farmOn).append(extras.dailiesPinned).append(extras.farmPinned)
-			.append(extras.hiddenRegions).append(extras.allRegions);
+			.append(extras.hiddenRegions).append(extras.allRegions).append(extras.pins).append(extras.favourites);
 		for (GoalsPanel.DailyView d : extras.dailies)
 		{
 			key.append('|').append(d.id).append(d.status);
