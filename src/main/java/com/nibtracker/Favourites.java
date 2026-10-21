@@ -12,6 +12,9 @@ final class Favourites
 	/* Ids hold |, : and commas, so tabs and ids are split on control characters that can't appear in one. */
 	private static final char TAB_SEP = '\u001E';
 	private static final char ID_SEP = '\u001F';
+	/* The Farming tab's Special and All trees groups on the game screen. */
+	static final String SPECIAL_PIN = "farming:special";
+	static final String TREES_PIN = "farming:trees";
 
 	private Favourites()
 	{
@@ -96,7 +99,7 @@ final class Favourites
 		return "farming:kind:" + key;
 	}
 
-	/** An old "farming:Herbs" pin, from before kinds had keys. */
+	/** An old "farming:Herbs" pin, from before kinds had keys. Check SPECIAL_PIN and TREES_PIN first: they match too. */
 	static boolean isLegacyKindPin(String pin)
 	{
 		return pin.startsWith("farming:") && !pin.startsWith("farming:kind:") && !pin.equals(FarmGroups.CONTRACT_ID);

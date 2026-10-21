@@ -6,31 +6,37 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
 import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.geom.Path2D;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
-import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -123,6 +129,8 @@ class GoalsPanel extends PluginPanel
 		/* Puts the row's real icon in the 28px slot (a goal's skill or item, a crop, the calendar); null leaves it empty. */
 		Consumer<JLabel> icon;
 		String title = "";
+		/* Wrap a long title onto more lines instead of cutting it short (the contract's). */
+		boolean wrapTitle;
 		Color titleColour = Color.WHITE;
 		String value = "";
 		Color valueColour = MUTED;
@@ -145,6 +153,13 @@ class GoalsPanel extends PluginPanel
 	private static final String FARMING = "Farming";
 	private static final String OVERVIEW = "Overview";
 	private static final String ALL = "All";
+	/* The Farming tab's group chips, in order, before its kind chips (Favourites is drawn with a ★ in front). */
+	private static final String ALL_PATCHES = "All patches";
+	private static final String FAVOURITES = "Favourites";
+	private static final String SPECIAL = "Special";
+	private static final String ALL_TREES = "All trees";
+	private static final String CONTRACT = "Farming contract";
+	private static final List<String> FARM_GROUPS = Arrays.asList(ALL_PATCHES, FAVOURITES, SPECIAL, ALL_TREES, CONTRACT);
 	/* Sub-filter values in the order they're offered. */
 	private static final List<String> TAG_ORDER = Arrays.asList("Easy", "Medium", "Hard", "Elite", "Master", "Grandmaster", "Not started", "In progress");
 	private static final BufferedImage LOGO = ImageUtil.loadImageResource(GoalsPanel.class, "goals_icon.png");
@@ -152,6 +167,8 @@ class GoalsPanel extends PluginPanel
 	static final BufferedImage CA_BOOK = ImageUtil.loadImageResource(GoalsPanel.class, "combat_achievements.png");
 	/* How far a main goal's parts are indented under it. */
 	private static final int PART_INDENT = 14;
+	/* A value longer than this goes on a row's second line (the contract's "Ready · then see Jane..."). */
+	private static final int SHORT_VALUE = 12;
 
 	private static final Color RED = new Color(0xC8, 0x4B, 0x3C);
 	private static final Color AMBER = new Color(0xE0, 0xA0, 0x30);
@@ -178,6 +195,14 @@ class GoalsPanel extends PluginPanel
 	/* Called with a daily task's id when it's ticked off, and with a region when it's shown or hidden. */
 	private Consumer<String> onDailyDone = id -> { };
 	private Consumer<String> onRegion = region -> { };
+	/* Called by the Farming picker's Done: every hidden region at once, or a tab's favourites in order. */
+	private Consumer<Set<String>> onRegionsSet = hidden -> { };
+	private BiConsumer<String, List<String>> onFavouritesSet = (tab, ids) -> { };
+	/* The Farming picker: the chip it's open on (null when shut), what's ticked, and the row last clicked for shift-click.
+	   It lives here until Done, so the redraws while it's open (timers, a new feed) don't close it or lose the ticks. */
+	private String picking;
+	private final Set<String> picked = new LinkedHashSet<>();
+	private int pickAnchor = -1;
 	/* The view picked in the tabs, each view's sub-filter, and whether the tabs are being rebuilt (so selecting doesn't redraw). */
 	private String view = OVERVIEW;
 	private final Map<String, String> filter = new HashMap<>();
@@ -264,7 +289,8 @@ class GoalsPanel extends PluginPanel
 		{
 			views.add(DAILIES);
 		}
-		if (extras.farmOn && !extras.allRegions.isEmpty())
+		// Farm data or a contract: the contract row works with the website closed.
+		if (extras.farmOn && (!extras.allRegions.isEmpty() || extras.contract != null))
 		{
 			views.add(FARMING);
 		}
@@ -283,7 +309,7 @@ class GoalsPanel extends PluginPanel
 				section(s.getKey(), s.getValue());
 			}
 			dailies(extras, true);
-			farming(extras, true);
+			farmingOverview(extras);
 			if (!layout.completed.isEmpty())
 			{
 				section(COMPLETED, layout.completed);
@@ -296,21 +322,32 @@ class GoalsPanel extends PluginPanel
 		}
 		else if (FARMING.equals(view))
 		{
-			// One chip per kind of patch you have a timer on (Herbs, Trees, Fruit trees, Hespori...), each with its crop's icon.
+			// The groups first, then one chip per kind of patch you have a timer on (Herbs, Trees, Fruit trees, Hespori...),
+			// each with its crop's icon.
 			List<String> kinds = new ArrayList<>();
-			kinds.add(ALL);
 			Map<String, Integer> kindIcons = new HashMap<>();
-			for (PatchView p : extras.patches)
+			for (PatchView p : shownPatches(extras))
 			{
-				if (!p.kindLabel.isEmpty() && !kinds.contains(p.kindLabel))
+				if (!p.kindLabel.isEmpty() && !kinds.contains(p.kindLabel) && !FARM_GROUPS.contains(p.kindLabel))
 				{
 					kinds.add(p.kindLabel);
 				}
-				kindIcons.putIfAbsent(p.kindLabel, p.itemId);
+				if (p.itemId > 0)
+				{
+					kindIcons.putIfAbsent(p.kindLabel, p.itemId);
+				}
 			}
-			kinds.subList(1, kinds.size()).sort(String::compareTo);
-			filters(kinds, kindIcons);
-			farming(extras, false);
+			kinds.sort(String::compareTo);
+			List<String> chips = new ArrayList<>(FARM_GROUPS);
+			chips.addAll(kinds);
+			kindIcons.put(SPECIAL, ItemID.HESPORI_SEED);
+			kindIcons.put(ALL_TREES, ItemID.MAGIC_LOGS);
+			kindIcons.put(CONTRACT, extras.contract != null && extras.contract.itemId > 0 ? extras.contract.itemId : ItemID.SEED_BOX);
+			Map<String, Icon> fixed = new HashMap<>();
+			fixed.put(ALL_PATCHES, farmingIcon(14));
+			fixed.put(FAVOURITES, new Glyph(true, true));
+			filters(chips, kindIcons, fixed);
+			farmingView(extras);
 		}
 		else
 		{
@@ -350,6 +387,7 @@ class GoalsPanel extends PluginPanel
 				if (!building && !v.equals(view))
 				{
 					view = v;
+					picking = null;
 					// A new tab starts at its top, not wherever the last one was scrolled to.
 					SwingUtilities.invokeLater(() -> {
 						redraw();
@@ -415,21 +453,23 @@ class GoalsPanel extends PluginPanel
 	/** The sub-filters for the current view (tiers, quest state, patch type...), as small clickable chips. */
 	private void filters(List<String> options)
 	{
-		filters(options, Collections.emptyMap());
+		filters(options, Collections.emptyMap(), Collections.emptyMap());
 	}
 
 	/**
 	 * Sub-filter chips in a grid that wraps onto as many rows as it needs, so every option shows (farming has many patch
-	 * kinds). Chips can carry an item icon (a seed or crop for each patch kind).
+	 * kinds). Chips can carry an item icon (a seed or crop for each patch kind) or a fixed one (the Farming skill, ★).
+	 * The first option is the default.
 	 */
-	private void filters(List<String> options, Map<String, Integer> iconItems)
+	private void filters(List<String> options, Map<String, Integer> iconItems, Map<String, Icon> fixedIcons)
 	{
 		filters.removeAll();
-		filters.setLayout(new GridLayout(0, iconItems.isEmpty() ? 3 : 2, 4, 4));
-		String current = filter.getOrDefault(view, ALL);
+		filters.setLayout(new GridLayout(0, iconItems.isEmpty() && fixedIcons.isEmpty() ? 3 : 2, 4, 4));
+		String first = options.isEmpty() ? ALL : options.get(0);
+		String current = filter.getOrDefault(view, first);
 		if (!options.contains(current))
 		{
-			current = ALL;
+			current = first;
 			filter.remove(view);
 		}
 		if (options.size() <= 1)
@@ -447,13 +487,20 @@ class GoalsPanel extends PluginPanel
 			chip.setBackground(on ? ColorScheme.BRAND_ORANGE.darker() : ColorScheme.DARKER_GRAY_COLOR);
 			chip.setBorder(new EmptyBorder(3, 5, 3, 5));
 			Integer item = iconItems.get(o);
-			if (item != null && item > 0 && itemManager != null)
+			Icon fixed = fixedIcons.get(o);
+			if (fixed != null)
+			{
+				chip.setIcon(fixed);
+				chip.setIconTextGap(4);
+			}
+			else if (item != null && item > 0 && itemManager != null)
 			{
 				itemIcon(item, 14, chip::setIcon);
 				chip.setIconTextGap(4);
 			}
 			chip.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 			onClick(chip, () -> {
+				picking = null;
 				filter.put(view, o);
 				redraw();
 			});
@@ -558,14 +605,15 @@ class GoalsPanel extends PluginPanel
 		boolean dailiesPinned;
 		boolean farmPinned;
 		final List<DailyView> dailies = new ArrayList<>();
-		/* Regions in order (soonest first) with their patches, and every visible patch on its own for the type filter. */
+		/* Shown regions in order (soonest first) with their patches, and every patch on its own, hidden regions' too
+		   (Favourites shows those; the other views leave them out), ready first. */
 		final List<Region> regions = new ArrayList<>();
 		final List<PatchView> patches = new ArrayList<>();
-		/* Every region with a timer, shown or not, for the show/hide menu. */
+		/* Every region with a timer, shown or not, for the All patches picker. */
 		final List<String> allRegions = new ArrayList<>();
 		final Set<String> hiddenRegions = new HashSet<>();
-		/* Patch kinds (Herbs...) shown on the game screen. */
-		final Set<String> pinnedKinds = new HashSet<>();
+		/* The Farming Guild contract row, or null when there's neither farm data nor a contract. */
+		FarmGroups.ContractView contract;
 		/* Each tab's favourite row ids, and everything on the game screen (goal ids, "daily:<id>", group pins). */
 		final Map<String, Set<String>> favourites = new HashMap<>();
 		final Set<String> pins = new HashSet<>();
@@ -604,6 +652,14 @@ class GoalsPanel extends PluginPanel
 		int order;
 		String travelCat = "";
 		String travelItem = "";
+		/* Which patch (region|name|kind, its ★ and ▣ id), its name in the region, its kind key (herb, hardwood...), its
+		   state (empty, growing, ready, diseased, dead, unknown), growth 0..1 (-1 unknown), and whether it's diseased or dead. */
+		String id = "";
+		String name = "";
+		String kind = "";
+		String state = "";
+		double progress = -1;
+		boolean attention;
 
 		PatchView(String region, String crop, String type, String status, String travel, String travelHow, boolean ready, int itemId)
 		{
@@ -704,7 +760,9 @@ class GoalsPanel extends PluginPanel
 			return;
 		}
 		String key = "fav:" + tab;
-		list.add(sectionHeader(key, "Favourites", cards.size(), new Glyph(true, true)));
+		// ▣ on the header puts the whole list on the game screen.
+		String pin = Favourites.groupPin(tab);
+		list.add(sectionHeader(key, FAVOURITES, cards.size(), new Glyph(true, true), null, pin, lastExtras.pins.contains(pin)));
 		if (!collapsed.contains(key))
 		{
 			cards.forEach(c -> list.add(card(c, 0)));
@@ -727,39 +785,108 @@ class GoalsPanel extends PluginPanel
 		return m;
 	}
 
-	/**
-	 * Farm timers. Overview and "All": by region, soonest first, each folding open to its patches. A patch type (Herb...):
-	 * every patch of that type, soonest first, with its region and the best way there with what's in your bank.
-	 */
-	private void farming(Extras x, boolean overview)
+	/** Patches in regions that are shown; Favourites alone also shows hidden regions' patches. */
+	private static List<PatchView> shownPatches(Extras x)
+	{
+		List<PatchView> out = new ArrayList<>();
+		for (PatchView p : x.patches)
+		{
+			if (!x.hiddenRegions.contains(p.region))
+			{
+				out.add(p);
+			}
+		}
+		return out;
+	}
+
+	/** Overview's Farming section: the shown regions, soonest first, each folding open to its patches. */
+	private void farmingOverview(Extras x)
 	{
 		if (!x.farmOn || x.allRegions.isEmpty())
 		{
 			return;
 		}
-		if (overview)
+		JComponent header = sectionHeader(FARMING, x.regions.size());
+		header.setComponentPopupMenu(farmMenu(x));
+		inheritMenu(header);
+		list.add(header);
+		if (!collapsed.contains(FARMING))
 		{
-			JComponent header = sectionHeader(FARMING, x.regions.size());
-			header.setComponentPopupMenu(regionsMenu(x));
-			inheritMenu(header);
-			list.add(header);
-			if (collapsed.contains(FARMING))
-			{
-				return;
-			}
+			regionRows(x);
 		}
-		String f = overview ? ALL : currentFilter();
-		if (!ALL.equals(f))
+	}
+
+	/** The Farming tab: the view its chip picks. Ready rows come first in each. */
+	private void farmingView(Extras x)
+	{
+		String f = filter.getOrDefault(FARMING, ALL_PATCHES);
+		switch (f)
 		{
-			runOrder(x, f);
+			case ALL_PATCHES:
+				allPatches(x);
+				break;
+			case FAVOURITES:
+				farmFavourites(x);
+				break;
+			case SPECIAL:
+				farmGroup(x, SPECIAL, Favourites.SPECIAL_PIN, FarmGroups::special, "No special patches with timers yet.");
+				break;
+			case ALL_TREES:
+				farmGroup(x, ALL_TREES, Favourites.TREES_PIN, FarmGroups::tree, "No tree patches with timers yet.");
+				break;
+			case CONTRACT:
+				if (x.contract != null)
+				{
+					list.add(card(contractCard(x), 0));
+				}
+				break;
+			default:
+				runOrder(x, f);
+		}
+	}
+
+	/** All patches: the shown regions folding open to their patches; "edit" opens the picker of which regions show. */
+	private void allPatches(Extras x)
+	{
+		String key = "farm:" + ALL_PATCHES;
+		boolean picker = ALL_PATCHES.equals(picking);
+		Runnable edit = picker || x.allRegions.isEmpty() ? null : () -> {
+			List<String> shown = new ArrayList<>(x.allRegions);
+			shown.removeAll(x.hiddenRegions);
+			openPicker(key, ALL_PATCHES, shown);
+		};
+		list.add(sectionHeader(key, ALL_PATCHES, x.regions.size(), null, edit, GoalTracker.FARMING, x.farmPinned));
+		if (collapsed.contains(key))
+		{
 			return;
 		}
+		if (picker)
+		{
+			picker(x.allRegions, x.allRegions, () -> onRegionsSet.accept(FarmRows.hiddenAfter(x.allRegions, x.hiddenRegions, picked)));
+			return;
+		}
+		if (x.allRegions.isEmpty())
+		{
+			list.add(note("No farm timers from Nib Tracker yet."));
+		}
+		else if (x.regions.isEmpty())
+		{
+			list.add(note("Every region is hidden. Click edit to show some."));
+		}
+		regionRows(x);
+	}
+
+	/** Each shown region as a row that folds open to its patches, ready first. Right-click hides one region. */
+	private void regionRows(Extras x)
+	{
 		for (Region r : x.regions)
 		{
 			String key = "farm:" + r.name;
 			boolean open = expanded.contains(key);
+			boolean attention = r.patches.stream().anyMatch(p -> p.attention);
 			// The region's icon is its soonest patch's crop.
-			Card row = simpleCard(r.patches.isEmpty() ? 0 : r.patches.get(0).itemId, (open ? "– " : "+ ") + r.name, r.summary, r.anyReady ? DONE : AMBER);
+			Card row = simpleCard(r.patches.isEmpty() ? 0 : r.patches.get(0).itemId, (open ? "– " : "+ ") + r.name, r.summary,
+				r.anyReady ? DONE : attention ? RED : AMBER);
 			row.click = () -> {
 				if (!expanded.remove(key))
 				{
@@ -767,39 +894,304 @@ class GoalsPanel extends PluginPanel
 				}
 				redraw();
 			};
-			JPopupMenu m = regionsMenu(x);
+			JPopupMenu m = farmMenu(x);
 			m.insert(item("Hide " + r.name, () -> onRegion.accept(r.name)), 0);
 			row.menu = m;
 			list.add(card(row, 0));
 			if (open)
 			{
-				String travel = r.patches.stream().map(p -> p.travel).filter(t -> !t.isEmpty()).findFirst().orElse("");
-				for (PatchView p : r.patches)
+				for (PatchView p : FarmRows.readyFirst(r.patches, v -> v.ready))
 				{
-					list.add(card(simpleCard(p.itemId, p.crop + (p.type.isEmpty() ? "" : " (" + p.type + ")"), p.status, p.ready ? DONE : AMBER), PART_INDENT));
-				}
-				if (!travel.isEmpty())
-				{
-					JLabel t = new JLabel("Get there: " + travel);
-					t.setFont(FontManager.getRunescapeSmallFont());
-					t.setForeground(MUTED);
-					t.setBorder(new EmptyBorder(0, PART_INDENT + 4, 2, 0));
-					list.add(t);
+					list.add(card(patchCard(x, p), PART_INDENT));
 				}
 			}
 		}
 	}
 
 	/**
-	 * One kind of patch (Herbs, say) as a run: stops in the order Nib Tracker's farm run planner works out with your bank,
-	 * each numbered, with the teleport to use there and its patches under it. Stops the planner didn't place go last.
+	 * ★ Favourites: the tab's favourite patches and the contract in the order saved (ready first), hidden regions
+	 * included. "edit" opens the picker of every patch plus the contract; ▣ on the header puts the list on screen.
 	 */
-	private void runOrder(Extras x, String kind)
+	private void farmFavourites(Extras x)
 	{
-		List<PatchView> ps = new ArrayList<>();
+		String key = "fav:" + FARMING;
+		Set<String> favs = favourites(FARMING);
+		Map<String, PatchView> byId = new HashMap<>();
 		for (PatchView p : x.patches)
 		{
-			if (kind.equals(p.kindLabel))
+			byId.putIfAbsent(p.id, p);
+		}
+		List<String> shown = new ArrayList<>();
+		for (String id : favs)
+		{
+			if (FarmGroups.CONTRACT_ID.equals(id) ? x.contract != null : byId.containsKey(id))
+			{
+				shown.add(id);
+			}
+		}
+		boolean picker = FAVOURITES.equals(picking);
+		String pin = Favourites.groupPin(FARMING);
+		list.add(sectionHeader(key, FAVOURITES, shown.size(), new Glyph(true, true),
+			picker ? null : () -> openPicker(key, FAVOURITES, favs), pin, x.pins.contains(pin)));
+		if (collapsed.contains(key))
+		{
+			return;
+		}
+		if (picker)
+		{
+			List<String> ids = new ArrayList<>();
+			List<String> labels = new ArrayList<>();
+			if (x.contract != null)
+			{
+				ids.add(FarmGroups.CONTRACT_ID);
+				labels.add(x.contract.title);
+			}
+			List<PatchView> all = new ArrayList<>(x.patches);
+			all.sort(Comparator.comparing((PatchView p) -> p.region).thenComparing(p -> p.crop));
+			Set<String> seen = new HashSet<>(ids);
+			for (PatchView p : all)
+			{
+				if (seen.add(p.id))
+				{
+					ids.add(p.id);
+					labels.add(p.crop + " · " + FarmRows.sub(p.region, p.name, ""));
+				}
+			}
+			picker(ids, labels, () -> onFavouritesSet.accept(FARMING, FarmRows.favouritesAfter(favs, ids, picked)));
+			return;
+		}
+		if (shown.isEmpty())
+		{
+			list.add(note("No favourites yet. Use the star, or edit."));
+			return;
+		}
+		for (String id : FarmRows.readyFirst(shown, id -> FarmGroups.CONTRACT_ID.equals(id) ? x.contract.ready : byId.get(id).ready))
+		{
+			list.add(card(FarmGroups.CONTRACT_ID.equals(id) ? contractCard(x) : patchCard(x, byId.get(id)), 0));
+		}
+	}
+
+	/** Special or All trees: their patches in the shown regions, under a small heading per kind (Hespori, Calquat...). */
+	private void farmGroup(Extras x, String name, String pin, Predicate<String> kinds, String none)
+	{
+		List<PatchView> ps = new ArrayList<>();
+		for (PatchView p : shownPatches(x))
+		{
+			if (kinds.test(p.kind))
+			{
+				ps.add(p);
+			}
+		}
+		String key = "farm:" + name;
+		list.add(sectionHeader(key, name, ps.size(), null, null, pin, x.pins.contains(pin)));
+		if (collapsed.contains(key))
+		{
+			return;
+		}
+		if (ps.isEmpty())
+		{
+			list.add(note(none));
+			return;
+		}
+		Map<String, List<PatchView>> byKind = new TreeMap<>();
+		for (PatchView p : ps)
+		{
+			byKind.computeIfAbsent(p.kindLabel.isEmpty() ? p.kind : p.kindLabel, k -> new ArrayList<>()).add(p);
+		}
+		for (Map.Entry<String, List<PatchView>> e : byKind.entrySet())
+		{
+			list.add(subHeader(e.getKey(), e.getValue().size()));
+			for (PatchView p : FarmRows.readyFirst(e.getValue(), v -> v.ready))
+			{
+				list.add(card(patchCard(x, p), 0));
+			}
+		}
+	}
+
+	/** A small heading inside a group (one kind of patch), with its count; it doesn't fold. */
+	private static JComponent subHeader(String name, int count)
+	{
+		JPanel p = new JPanel(new BorderLayout());
+		p.setOpaque(false);
+		p.setBorder(new EmptyBorder(4, 4, 0, 2));
+		JLabel l = new JLabel(name);
+		l.setFont(FontManager.getRunescapeSmallFont());
+		l.setForeground(MUTED);
+		JLabel n = new JLabel(String.valueOf(count));
+		n.setFont(FontManager.getRunescapeSmallFont());
+		n.setForeground(MUTED);
+		p.add(l, BorderLayout.WEST);
+		p.add(n, BorderLayout.EAST);
+		return p;
+	}
+
+	/** A patch as a row: crop, status, growth bar, "region · name · travel"; green when ready, red when diseased or dead. */
+	private Card patchCard(Extras x, PatchView p)
+	{
+		Card c = new Card();
+		c.id = p.id;
+		c.favTab = FARMING;
+		c.pinId = Favourites.patchPin(p.id);
+		c.fav = favourites(FARMING).contains(p.id);
+		c.pinned = x.pins.contains(c.pinId);
+		c.icon = cropIcon(p.itemId);
+		c.title = p.crop;
+		c.value = p.status;
+		c.edge = p.ready ? DONE : p.attention ? RED : AMBER;
+		c.valueColour = p.ready ? DONE : p.attention ? RED : MUTED;
+		c.progress = p.progress;
+		c.barDone = p.ready;
+		c.sub = FarmRows.sub(p.region, p.name, p.travel);
+		c.tooltip = p.travelHow.isEmpty() ? null : "<html>" + escape(p.crop) + "<br><div style='width:180px'>" + escape(p.travelHow) + "</div></html>";
+		return c;
+	}
+
+	/**
+	 * The Farming Guild contract as a row, whatever crop it is now (its id never changes). A long value ("Ready · then see
+	 * Jane for a new contract") goes on the second line, where it has room, and the title wraps rather than being cut.
+	 */
+	private Card contractCard(Extras x)
+	{
+		FarmGroups.ContractView v = x.contract;
+		Card c = new Card();
+		c.id = FarmGroups.CONTRACT_ID;
+		c.favTab = FARMING;
+		c.pinId = FarmGroups.CONTRACT_ID;
+		c.fav = favourites(FARMING).contains(c.id);
+		c.pinned = x.pins.contains(c.pinId);
+		c.icon = cropIcon(v.itemId);
+		c.title = v.title;
+		c.wrapTitle = true;
+		Color state = v.ready ? DONE : v.attention ? RED : MUTED;
+		c.edge = v.ready ? DONE : v.attention ? RED : AMBER;
+		if (v.value.length() <= SHORT_VALUE)
+		{
+			c.value = v.value;
+			c.valueColour = state;
+			c.sub = v.sub;
+		}
+		else
+		{
+			c.sub = v.sub.isEmpty() ? v.value : v.value + "  ·  " + v.sub;
+			c.subColour = state;
+		}
+		c.progress = v.progress;
+		c.barDone = v.ready;
+		c.tooltip = "<html>" + escape(v.title) + "<br>" + escape(v.value) + (v.sub.isEmpty() ? "" : "<br>" + escape(v.sub)) + "</html>";
+		return c;
+	}
+
+	/** A crop's icon in the row's slot, or the Farming skill's when the patch has no crop item (empty, unknown). */
+	private Consumer<JLabel> cropIcon(int itemId)
+	{
+		if (itemId > 0 && itemManager != null)
+		{
+			return l -> itemIcon(itemId, ICON, l::setIcon);
+		}
+		return l -> l.setIcon(icons.computeIfAbsent("skill:FARMING", k -> new ImageIcon(fit(skillIcons.getSkillImage(Skill.FARMING, false)))));
+	}
+
+	private Icon farmingIcon(int size)
+	{
+		return icons.computeIfAbsent("skill:FARMING:" + size, k -> new ImageIcon(fitTo(skillIcons.getSkillImage(Skill.FARMING, false), size)));
+	}
+
+	private JPopupMenu farmMenu(Extras x)
+	{
+		JPopupMenu m = new JPopupMenu();
+		m.add(item(x.farmPinned ? "Remove farming from game screen" : "Show farming on game screen", () -> onPin.accept(GoalTracker.FARMING)));
+		return m;
+	}
+
+	/** Opens the picker on this chip's list with these ticked, unfolding its section. */
+	private void openPicker(String key, String chip, Collection<String> ticked)
+	{
+		picking = chip;
+		picked.clear();
+		picked.addAll(ticked);
+		pickAnchor = -1;
+		collapsed.remove(key);
+		redraw();
+	}
+
+	/**
+	 * The picker, inline under its header: Select all, Clear and Done, then a tick box per row. It stays open between
+	 * clicks (no popup menu to close) and keeps its ticks in the panel until Done, which hands them on and shuts it.
+	 * Shift-click ticks or unticks every row from the last one clicked.
+	 */
+	private void picker(List<String> ids, List<String> labels, Runnable done)
+	{
+		List<JCheckBox> boxes = new ArrayList<>();
+		Runnable sync = () -> {
+			for (int i = 0; i < boxes.size(); i++)
+			{
+				boxes.get(i).setSelected(picked.contains(ids.get(i)));
+			}
+		};
+		JPanel bar = new JPanel(new GridLayout(1, 3, 4, 0));
+		bar.setOpaque(false);
+		bar.add(pickerButton("Select all", false, () -> {
+			picked.addAll(ids);
+			sync.run();
+		}));
+		bar.add(pickerButton("Clear", false, () -> {
+			picked.removeAll(ids);
+			sync.run();
+		}));
+		bar.add(pickerButton("Done", true, () -> {
+			done.run();
+			picking = null;
+			picked.clear();
+			pickAnchor = -1;
+			redraw();
+		}));
+		list.add(bar);
+		list.add(note("Shift-click ticks a range."));
+		for (int i = 0; i < ids.size(); i++)
+		{
+			int index = i;
+			JCheckBox box = new JCheckBox(labels.get(i), picked.contains(ids.get(i)));
+			box.setFont(FontManager.getRunescapeSmallFont());
+			box.setForeground(Color.WHITE);
+			box.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+			box.setFocusPainted(false);
+			box.setBorder(new EmptyBorder(3, 6, 3, 6));
+			box.setToolTipText(labels.get(i));
+			box.addActionListener(e -> {
+				boolean shift = (e.getModifiers() & ActionEvent.SHIFT_MASK) != 0;
+				FarmRows.tickRange(ids, shift ? pickAnchor : -1, index, box.isSelected(), picked);
+				pickAnchor = index;
+				sync.run();
+			});
+			boxes.add(box);
+			list.add(box);
+		}
+	}
+
+	private static JLabel pickerButton(String text, boolean main, Runnable action)
+	{
+		JLabel b = new JLabel(text, SwingConstants.CENTER);
+		b.setFont(FontManager.getRunescapeSmallFont());
+		b.setForeground(Color.WHITE);
+		b.setOpaque(true);
+		b.setBackground(main ? ColorScheme.BRAND_ORANGE.darker() : ColorScheme.DARKER_GRAY_COLOR);
+		b.setBorder(new EmptyBorder(4, 5, 4, 5));
+		b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		onClick(b, action);
+		return b;
+	}
+
+	/**
+	 * One kind of patch (Herbs, say) as a run: stops in the order Nib Tracker's farm run planner works out with your bank,
+	 * each numbered with the teleport's icon, and its patches under it as rows. Stops the planner didn't place go last.
+	 * ▣ on the header puts the kind on the game screen.
+	 */
+	private void runOrder(Extras x, String label)
+	{
+		List<PatchView> ps = new ArrayList<>();
+		for (PatchView p : shownPatches(x))
+		{
+			if (label.equals(p.kindLabel))
 			{
 				ps.add(p);
 			}
@@ -810,43 +1202,49 @@ class GoalsPanel extends PluginPanel
 		{
 			stops.computeIfAbsent(p.order + "|" + p.region, k -> new ArrayList<>()).add(p);
 		}
-		long ready = ps.stream().filter(p -> p.ready).count();
-		boolean pinned = x.pinnedKinds.contains(kind);
-		Runnable pin = () -> onPin.accept(GoalTracker.FARMING + ":" + kind);
-		Card head = simpleCard(0, "Run order  ·  " + stops.size() + (stops.size() == 1 ? " stop" : " stops"), ready > 0 ? ready + " ready" : "Growing", ready > 0 ? DONE : AMBER);
-		head.icon = l -> l.setIcon(icons.computeIfAbsent("skill:FARMING", k -> new ImageIcon(fit(skillIcons.getSkillImage(Skill.FARMING, false)))));
-		JPopupMenu headMenu = new JPopupMenu();
-		headMenu.add(item(pinned ? "Remove " + kind + " from game screen" : "Show " + kind + " on game screen", pin));
-		head.menu = headMenu;
-		head.tooltip = "Right-click to " + (pinned ? "remove " + kind + " from" : "show " + kind + " on") + " the game screen";
-		list.add(card(head, 0));
+		// The pin is the kind's key; an old "farming:Herbs" pin still shows as pinned, and is what a click takes off.
+		String legacy = GoalTracker.FARMING + ":" + label;
+		String kind = ps.isEmpty() ? "" : ps.get(0).kind;
+		boolean hasLegacy = x.pins.contains(legacy);
+		String pin = hasLegacy || kind.isEmpty() ? legacy : Favourites.kindPin(kind);
+		boolean pinned = hasLegacy || !kind.isEmpty() && x.pins.contains(Favourites.kindPin(kind));
+		String key = "farm:kind:" + label;
+		list.add(sectionHeader(key, "Run order  ·  " + stops.size() + (stops.size() == 1 ? " stop" : " stops"), ps.size(),
+			farmingIcon(14), null, pin, pinned));
+		if (collapsed.contains(key))
+		{
+			return;
+		}
 		int n = 0;
 		for (List<PatchView> stop : stops.values())
 		{
 			n++;
 			PatchView first = stop.get(0);
 			long r = stop.stream().filter(p -> p.ready).count();
-			String status = r > 0 ? r + " ready" : stop.stream().map(p -> p.status).min(Comparator.comparingInt(String::length).thenComparing(s -> s)).orElse("");
-			Card row = simpleCard(first.itemId, n + "   " + first.region, status, r > 0 ? DONE : AMBER);
-			JPopupMenu m = new JPopupMenu();
-			m.add(item(pinned ? "Remove " + kind + " from game screen" : "Show " + kind + " on game screen", pin));
-			row.menu = m;
-			list.add(card(row, 0));
-			if (!first.travel.isEmpty())
+			JPanel head = new JPanel(new BorderLayout(6, 0));
+			head.setOpaque(false);
+			head.setBorder(new EmptyBorder(4, 4, 0, 2));
+			JLabel t = new JLabel(n + "   " + first.region);
+			t.setFont(FontManager.getRunescapeSmallFont());
+			t.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+			t.setIconTextGap(5);
+			teleIcon(first, t);
+			JLabel s = new JLabel(r > 0 ? r + " ready" : "");
+			s.setFont(FontManager.getRunescapeSmallFont());
+			s.setForeground(DONE);
+			head.add(t, BorderLayout.CENTER);
+			head.add(s, BorderLayout.EAST);
+			head.setToolTipText(first.travel.isEmpty() ? null : "<html>" + escape(first.travel)
+				+ (first.travelHow.isEmpty() ? "" : "<br><div style='width:180px'>" + escape(first.travelHow) + "</div>") + "</html>");
+			list.add(head);
+			for (PatchView p : FarmRows.readyFirst(stop, v -> v.ready))
 			{
-				JLabel t = new JLabel(first.travel);
-				t.setFont(FontManager.getRunescapeSmallFont());
-				t.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-				t.setBorder(new EmptyBorder(1, PART_INDENT + 4, 1, 0));
-				t.setIconTextGap(5);
-				teleIcon(first, t);
-				t.setToolTipText(first.travelHow.isEmpty() ? null : "<html><div style='width:180px'>" + escape(first.travelHow) + "</div></html>");
-				list.add(t);
+				list.add(card(patchCard(x, p), PART_INDENT));
 			}
-			for (PatchView p : stop)
-			{
-				list.add(card(simpleCard(p.itemId, p.crop, p.status, p.ready ? DONE : AMBER), PART_INDENT));
-			}
+		}
+		if (ps.isEmpty())
+		{
+			list.add(note("Nothing here in the shown regions."));
 		}
 	}
 
@@ -897,21 +1295,6 @@ class GoalsPanel extends PluginPanel
 		}
 	}
 
-	/** Right-click on Farming: tick the regions to show, and put farming on the game screen. */
-	private JPopupMenu regionsMenu(Extras x)
-	{
-		JPopupMenu m = new JPopupMenu();
-		m.add(item(x.farmPinned ? "Remove farming from game screen" : "Show farming on game screen", () -> onPin.accept(GoalTracker.FARMING)));
-		m.addSeparator();
-		for (String region : x.allRegions)
-		{
-			JCheckBoxMenuItem c = new JCheckBoxMenuItem(region, !x.hiddenRegions.contains(region));
-			c.addActionListener(e -> onRegion.accept(region));
-			m.add(c);
-		}
-		return m;
-	}
-
 	private static JMenuItem item(String text, Runnable run)
 	{
 		JMenuItem i = new JMenuItem(text);
@@ -928,14 +1311,11 @@ class GoalsPanel extends PluginPanel
 		return l;
 	}
 
-	/** A plain row (a farm region, patch or run stop): an item's icon, a title, a status on the right, a coloured edge. */
+	/** A plain row (a farm region): its crop's icon, a title, a status on the right, a coloured edge. */
 	private Card simpleCard(int itemId, String title, String value, Color edge)
 	{
 		Card c = new Card();
-		if (itemId > 0 && itemManager != null)
-		{
-			c.icon = l -> itemIcon(itemId, ICON, l::setIcon);
-		}
+		c.icon = cropIcon(itemId);
 		c.title = title;
 		c.value = value;
 		c.edge = edge;
@@ -1025,8 +1405,16 @@ class GoalsPanel extends PluginPanel
 		return sectionHeader(name, name, count, null);
 	}
 
-	/** A section's heading, folded by key; an icon (the ★ for Favourites) goes between the fold sign and the name. */
 	private JComponent sectionHeader(String key, String name, int count, Icon icon)
+	{
+		return sectionHeader(key, name, count, icon, null, null, false);
+	}
+
+	/**
+	 * A section's heading, folded by key; an icon (the ★ for Favourites) goes between the fold sign and the name. On the
+	 * right, before the count, an "edit" link when there's a picker; after it, ▣ when the whole section can go on screen.
+	 */
+	private JComponent sectionHeader(String key, String name, int count, Icon icon, Runnable edit, String pinId, boolean pinned)
 	{
 		boolean shut = collapsed.contains(key);
 		JPanel p = new JPanel(new BorderLayout());
@@ -1053,7 +1441,32 @@ class GoalsPanel extends PluginPanel
 		n.setFont(FontManager.getRunescapeSmallFont());
 		n.setForeground(MUTED);
 		p.add(title, BorderLayout.WEST);
-		p.add(n, BorderLayout.EAST);
+		if (edit == null && pinId == null)
+		{
+			p.add(n, BorderLayout.EAST);
+		}
+		else
+		{
+			// "edit" and ▣ take their own clicks, so they don't fold the section.
+			JPanel east = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+			east.setOpaque(false);
+			if (edit != null)
+			{
+				JLabel e = new JLabel("edit");
+				e.setFont(FontManager.getRunescapeSmallFont());
+				e.setForeground(HEADING);
+				e.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+				e.setToolTipText("Tick several at once");
+				onClick(e, edit);
+				east.add(e);
+			}
+			east.add(n);
+			if (pinId != null)
+			{
+				east.add(glyph(false, pinned, "Show on game screen", "Remove from game screen", () -> onPin.accept(pinId)));
+			}
+			p.add(east, BorderLayout.EAST);
+		}
 		p.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		p.setToolTipText(shut ? "Show " + name.toLowerCase() : "Hide " + name.toLowerCase());
 		onClick(p, () -> {
@@ -1140,6 +1553,12 @@ class GoalsPanel extends PluginPanel
 		JLabel value = new JLabel(c.value);
 		value.setFont(FontManager.getRunescapeSmallFont());
 		value.setForeground(c.valueColour);
+		if (c.wrapTitle)
+		{
+			// What's left beside the value and ★ ▣ (34px).
+			int width = HINT_WIDTH - indent - 34 - (c.value.isEmpty() ? 0 : value.getPreferredSize().width + 6);
+			title.setText("<html><div style='width:" + Math.max(60, width) + "px'>" + escape(c.title) + "</div></html>");
+		}
 		JLabel star = glyph(true, c.fav, "Add to favourites", "Remove from favourites",
 			c.favTab == null ? null : () -> onFavourite.accept(c.favTab, c.id));
 		JLabel pin = glyph(false, c.pinned, "Show on game screen", "Remove from game screen",
@@ -1329,6 +1748,18 @@ class GoalsPanel extends PluginPanel
 	void onRegion(Consumer<String> onRegion)
 	{
 		this.onRegion = onRegion;
+	}
+
+	/** Sets what the All patches picker's Done does: called with every hidden region. */
+	void onRegionsSet(Consumer<Set<String>> onRegionsSet)
+	{
+		this.onRegionsSet = onRegionsSet;
+	}
+
+	/** Sets what the Favourites picker's Done does: called with the tab and its favourite ids in order. */
+	void onFavouritesSet(BiConsumer<String, List<String>> onFavouritesSet)
+	{
+		this.onFavouritesSet = onFavouritesSet;
 	}
 
 	/* The right-click menu works anywhere on the row, labels included. */

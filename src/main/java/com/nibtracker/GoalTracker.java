@@ -84,6 +84,9 @@ class GoalTracker
 	@Inject
 	private SkillIconManager skillIcons;
 
+	@Inject
+	private FarmingTracker farmingTracker;
+
 	/* The id the current Slayer task has in the panel and on screen. */
 	static final String SLAYER_TASK = "slayer-task";
 	/* Ids for the daily tasks and farming icons on the game screen. */
@@ -139,6 +142,8 @@ class GoalTracker
 		panel.onFavourite(this::toggleFavourite);
 		panel.onDailyDone(this::dailyDone);
 		panel.onRegion(this::toggleRegion);
+		panel.onRegionsSet(this::setHiddenRegions);
+		panel.onFavouritesSet(this::setFavourites);
 		dirty = true;
 	}
 
@@ -159,6 +164,15 @@ class GoalTracker
 	{
 		Map<String, Set<String>> favourites = Favourites.parse(config.favourites());
 		Favourites.toggle(favourites, tab, id);
+		configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.FAVOURITES, Favourites.write(favourites));
+		dirty = true;
+	}
+
+	/** Swing thread. Sets a tab's favourites all at once (the Farming picker's Done), in this order. */
+	void setFavourites(String tab, List<String> ids)
+	{
+		Map<String, Set<String>> favourites = Favourites.parse(config.favourites());
+		Favourites.setAll(favourites, tab, ids);
 		configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.FAVOURITES, Favourites.write(favourites));
 		dirty = true;
 	}
@@ -454,40 +468,59 @@ class GoalTracker
 		x.allRegions.sort(String::compareTo);
 		x.hiddenRegions.addAll(hidden);
 		List<Map.Entry<String, List<Routines.Patch>>> regions = new ArrayList<>(byRegion.entrySet());
-		regions.removeIf(e -> hidden.contains(e.getKey()));
 		regions.sort(Comparator.comparingLong(e -> soonest(e.getValue(), now)));
 		List<Routines.Patch> readyNow = new ArrayList<>();
 		Routines.Patch next = null;
+		// Every patch goes in x.patches (Favourites shows hidden regions too); only shown regions go in x.regions.
 		for (Map.Entry<String, List<Routines.Patch>> e : regions)
 		{
 			List<Routines.Patch> ps = new ArrayList<>(e.getValue());
-			ps.sort(Comparator.comparingLong(p -> p.readyAt(now) ? 0 : p.readyAt > 0 ? p.readyAt : Long.MAX_VALUE));
-			GoalsPanel.Region r = new GoalsPanel.Region(e.getKey(), Routines.summary(ps, now), ps.stream().anyMatch(p -> p.readyAt(now)));
+			ps.sort(Comparator.comparingLong(p -> FarmRows.ready(p, now) ? 0 : p.readyAt > 0 ? p.readyAt : Long.MAX_VALUE));
+			boolean shown = FarmGroups.shownInAll(ps.get(0), hidden);
+			GoalsPanel.Region r = shown ? new GoalsPanel.Region(e.getKey(), Routines.summary(ps, now), ps.stream().anyMatch(p -> FarmRows.ready(p, now))) : null;
 			for (Routines.Patch p : ps)
 			{
-				boolean isReady = p.readyAt(now);
-				if (isReady)
+				boolean isReady = FarmRows.ready(p, now);
+				if (shown && isReady)
 				{
 					readyNow.add(p);
 				}
-				else if (p.readyAt > 0 && (next == null || p.readyAt < next.readyAt))
+				else if (shown && !p.needsAttention() && p.readyAt > now && (next == null || p.readyAt < next.readyAt))
 				{
 					next = p;
 				}
-				String crop = p.crop + (p.name.isEmpty() || p.name.equals(p.region) ? "" : " · " + p.name);
-				GoalsPanel.PatchView v = new GoalsPanel.PatchView(p.region, crop, p.type,
-					isReady ? "Ready" : p.readyAt > 0 ? Routines.left(p.readyAt - now) : "Growing", p.travel, p.travelHow, isReady, p.itemId);
+				GoalsPanel.PatchView v = new GoalsPanel.PatchView(p.region, FarmRows.title(p), p.type,
+					FarmRows.status(p, now), p.travel, p.travelHow, isReady, p.itemId);
+				v.id = p.id();
+				v.name = p.name;
+				v.kind = p.kind;
+				v.state = p.state;
+				v.progress = isReady ? 1 : p.progress;
+				v.attention = p.needsAttention();
 				v.kindLabel = p.kindLabel;
 				v.order = p.order;
 				v.travelCat = p.travelCat;
 				v.travelItem = p.travelItem;
-				r.patches.add(v);
+				if (r != null)
+				{
+					r.patches.add(v);
+				}
 				x.patches.add(v);
 			}
-			x.regions.add(r);
+			if (r != null)
+			{
+				x.regions.add(r);
+			}
+		}
+		// The Farming Guild contract, read from Time Tracking (held in memory, no disk read): there whenever there's farm
+		// data or a contract, so a favourited or pinned contract never goes away ("No contract · talk to Jane" when none).
+		int contractItem = farmingTracker.contractItemId();
+		if (contractItem > 0 || !farm.isEmpty())
+		{
+			x.contract = FarmGroups.contractView(FarmGroups.contract(contractItem), farm, now);
 		}
 		x.patches.sort(Comparator.comparing((GoalsPanel.PatchView v) -> !v.ready).thenComparing(v -> v.status.length()).thenComparing(v -> v.status));
-		if (x.farmPinned && !regions.isEmpty())
+		if (x.farmPinned && !x.regions.isEmpty())
 		{
 			StringBuilder tip = new StringBuilder(readyNow.isEmpty() ? "Farming" : "Ready to harvest");
 			for (Routines.Patch p : readyNow)
@@ -508,12 +541,12 @@ class GoalTracker
 		// One kind of patch on screen (Herbs, say): how many are ready, and the run to do them in, with each stop's teleport.
 		for (String pin : pins)
 		{
-			if (!pin.startsWith(FARMING + ":"))
+			// Only old "farming:Herbs" pins; the Special, All trees, kind and contract pins aren't kind labels.
+			if (pin.equals(Favourites.SPECIAL_PIN) || pin.equals(Favourites.TREES_PIN) || !Favourites.isLegacyKindPin(pin))
 			{
 				continue;
 			}
 			String kind = pin.substring(FARMING.length() + 1);
-			x.pinnedKinds.add(kind);
 			List<Routines.Patch> ps = new ArrayList<>();
 			for (Routines.Patch p : farm)
 			{
@@ -656,6 +689,13 @@ class GoalTracker
 		{
 			hidden.add(region);
 		}
+		configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.HIDDEN_FARM_REGIONS, String.join(",", hidden));
+		dirty = true;
+	}
+
+	/** Swing thread. Sets every hidden farming region at once (the All patches picker's Done). */
+	void setHiddenRegions(Set<String> hidden)
+	{
 		configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.HIDDEN_FARM_REGIONS, String.join(",", hidden));
 		dirty = true;
 	}
@@ -994,6 +1034,15 @@ class GoalTracker
 		{
 			key.append('|').append(r.name).append(r.summary);
 			r.patches.forEach(p -> key.append(p.crop).append(p.status).append(p.travel));
+		}
+		for (GoalsPanel.PatchView p : extras.patches)
+		{
+			key.append('|').append(p.id).append(p.status).append(p.state).append(Math.round(p.progress * 100));
+		}
+		if (extras.contract != null)
+		{
+			FarmGroups.ContractView c = extras.contract;
+			key.append('|').append(c.title).append(c.value).append(c.sub).append(c.itemId).append(Math.round(c.progress * 100));
 		}
 		for (GoalsPanel.Row r : rows)
 		{
