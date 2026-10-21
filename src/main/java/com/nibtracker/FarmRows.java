@@ -24,6 +24,82 @@ final class FarmRows
 		return p.readyAt(now) || "ready".equals(p.state);
 	}
 
+	/** A crop growing or ready: not empty, unknown, diseased or dead. Only these count towards timers and ready shares. */
+	static boolean growing(Routines.Patch p)
+	{
+		return !p.needsAttention() && !"empty".equals(p.state) && !"unknown".equals(p.state);
+	}
+
+	/**
+	 * For sorting soonest first: 0 when ready, its time when growing with a timer, then growing with no timer, and last
+	 * a patch with nothing growing (a timer on an empty, unknown, diseased or dead patch means nothing).
+	 */
+	static long soonest(Routines.Patch p, long now)
+	{
+		if (ready(p, now))
+		{
+			return 0;
+		}
+		if (!growing(p))
+		{
+			return Long.MAX_VALUE;
+		}
+		return p.readyAt > now ? p.readyAt : Long.MAX_VALUE - 1;
+	}
+
+	static long soonest(List<Routines.Patch> ps, long now)
+	{
+		long best = Long.MAX_VALUE;
+		for (Routines.Patch p : ps)
+		{
+			best = Math.min(best, soonest(p, now));
+		}
+		return best;
+	}
+
+	/** The growing crop that's ready soonest, by its timer; null when none has a timer. */
+	static Routines.Patch next(List<Routines.Patch> ps, long now)
+	{
+		Routines.Patch next = null;
+		for (Routines.Patch p : ps)
+		{
+			if (growing(p) && !ready(p, now) && p.readyAt > now && (next == null || p.readyAt < next.readyAt))
+			{
+				next = p;
+			}
+		}
+		return next;
+	}
+
+	static boolean anyGrowing(List<Routines.Patch> ps)
+	{
+		return ps.stream().anyMatch(FarmRows::growing);
+	}
+
+	/** How many of the growing or ready crops are ready, 0 to 1; empty, unknown, diseased and dead don't count. */
+	static double readyShare(List<Routines.Patch> ps, long now)
+	{
+		long all = ps.stream().filter(FarmRows::growing).count();
+		return all == 0 ? 0 : (double) ps.stream().filter(p -> ready(p, now)).count() / all;
+	}
+
+	/** What a group says when nothing is ready or timed: Growing, or else Diseased, Dead, Empty or Unknown. */
+	static String idle(List<Routines.Patch> ps)
+	{
+		if (anyGrowing(ps))
+		{
+			return "Growing";
+		}
+		for (String state : new String[]{"diseased", "dead", "empty"})
+		{
+			if (ps.stream().anyMatch(p -> state.equals(p.state)))
+			{
+				return Character.toUpperCase(state.charAt(0)) + state.substring(1);
+			}
+		}
+		return "Unknown";
+	}
+
 	/** The row's value: Diseased, Dead, Ready, Empty, Unknown, the time left, or Growing when there's no timer. */
 	static String status(Routines.Patch p, long now)
 	{

@@ -202,7 +202,7 @@ class GoalsPanel extends PluginPanel
 	   It lives here until Done, so the redraws while it's open (timers, a new feed) don't close it or lose the ticks. */
 	private String picking;
 	private final Set<String> picked = new LinkedHashSet<>();
-	private int pickAnchor = -1;
+	private String pickAnchor;
 	/* The view picked in the tabs, each view's sub-filter, and whether the tabs are being rebuilt (so selecting doesn't redraw). */
 	private String view = OVERVIEW;
 	private final Map<String, String> filter = new HashMap<>();
@@ -1101,7 +1101,7 @@ class GoalsPanel extends PluginPanel
 		picking = chip;
 		picked.clear();
 		picked.addAll(ticked);
-		pickAnchor = -1;
+		pickAnchor = null;
 		collapsed.remove(key);
 		redraw();
 	}
@@ -1134,7 +1134,7 @@ class GoalsPanel extends PluginPanel
 			done.run();
 			picking = null;
 			picked.clear();
-			pickAnchor = -1;
+			pickAnchor = null;
 			redraw();
 		}));
 		list.add(bar);
@@ -1151,8 +1151,9 @@ class GoalsPanel extends PluginPanel
 			box.setToolTipText(labels.get(i));
 			box.addActionListener(e -> {
 				boolean shift = (e.getModifiers() & ActionEvent.SHIFT_MASK) != 0;
-				FarmRows.tickRange(ids, shift ? pickAnchor : -1, index, box.isSelected(), picked);
-				pickAnchor = index;
+				// The anchor is held by id: a feed refresh can redraw the list in another order mid-pick (gone: -1, one row).
+				FarmRows.tickRange(ids, shift && pickAnchor != null ? ids.indexOf(pickAnchor) : -1, index, box.isSelected(), picked);
+				pickAnchor = ids.get(index);
 				sync.run();
 			});
 			boxes.add(box);

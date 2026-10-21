@@ -481,24 +481,26 @@ class GoalTracker
 		x.allRegions.sort(String::compareTo);
 		x.hiddenRegions.addAll(hidden);
 		List<Map.Entry<String, List<Routines.Patch>>> regions = new ArrayList<>(byRegion.entrySet());
-		regions.sort(Comparator.comparingLong(e -> soonest(e.getValue(), now)));
+		regions.sort(Comparator.comparingLong(e -> FarmRows.soonest(e.getValue(), now)));
 		List<Routines.Patch> readyNow = new ArrayList<>();
 		Routines.Patch next = null;
+		boolean anyGrowing = false;
 		// Every patch goes in x.patches (hiding is for All patches only); only shown regions go in x.regions.
 		for (Map.Entry<String, List<Routines.Patch>> e : regions)
 		{
 			List<Routines.Patch> ps = new ArrayList<>(e.getValue());
-			ps.sort(Comparator.comparingLong(p -> FarmRows.ready(p, now) ? 0 : p.readyAt > 0 ? p.readyAt : Long.MAX_VALUE));
+			ps.sort(Comparator.comparingLong(p -> FarmRows.soonest(p, now)));
 			boolean shown = FarmGroups.shownInAll(ps.get(0), hidden);
 			GoalsPanel.Region r = shown ? new GoalsPanel.Region(e.getKey(), Routines.summary(ps, now), ps.stream().anyMatch(p -> FarmRows.ready(p, now))) : null;
 			for (Routines.Patch p : ps)
 			{
 				boolean isReady = FarmRows.ready(p, now);
+				anyGrowing |= shown && FarmRows.growing(p);
 				if (shown && isReady)
 				{
 					readyNow.add(p);
 				}
-				else if (shown && !p.needsAttention() && p.readyAt > now && (next == null || p.readyAt < next.readyAt))
+				else if (shown && FarmRows.growing(p) && p.readyAt > now && (next == null || p.readyAt < next.readyAt))
 				{
 					next = p;
 				}
@@ -526,14 +528,17 @@ class GoalTracker
 			}
 		}
 		// The Farming Guild contract, read from Time Tracking (held in memory, no disk read): there whenever there's farm
-		// data or a contract, so a favourited or pinned contract never goes away ("No contract · talk to Jane" when none).
+		// data, a contract, or it's pinned or favourited, so it never goes away ("No contract · talk to Jane" when none).
 		int contractItem = farmingTracker.contractItemId();
-		if (contractItem > 0 || !farm.isEmpty())
+		boolean contractKept = pins.contains(FarmGroups.CONTRACT_ID)
+			|| x.favourites.getOrDefault(FARMING_BOX, Collections.emptySet()).contains(FarmGroups.CONTRACT_ID);
+		if (contractItem > 0 || !farm.isEmpty() || contractKept)
 		{
 			x.contract = FarmGroups.contractView(FarmGroups.contract(contractItem), farm, now);
 		}
 		x.patches.sort(Comparator.comparing((GoalsPanel.PatchView v) -> !v.ready).thenComparing(v -> v.status.length()).thenComparing(v -> v.status));
-		if (x.farmPinned && !x.regions.isEmpty())
+		// The old whole-farming pin shows only while something is growing or ready, as it did before patches had states.
+		if (x.farmPinned && !x.regions.isEmpty() && anyGrowing)
 		{
 			StringBuilder tip = new StringBuilder(readyNow.isEmpty() ? "Farming" : "Ready to harvest");
 			for (Routines.Patch p : readyNow)
@@ -568,7 +573,8 @@ class GoalTracker
 					ps.add(p);
 				}
 			}
-			if (!ps.isEmpty())
+			// Like the old whole-farming pin: only while one of them is growing or ready.
+			if (FarmRows.anyGrowing(ps))
 			{
 				onScreen.add(kindEntry(LEGACY_BOX + pin, kind, ps, now));
 			}
@@ -750,18 +756,14 @@ class GoalTracker
 	{
 		ps.sort(Comparator.comparingInt((Routines.Patch p) -> p.order > 0 ? p.order : Integer.MAX_VALUE).thenComparing(p -> p.region));
 		List<Routines.Patch> ready = new ArrayList<>();
-		Routines.Patch next = null;
 		for (Routines.Patch p : ps)
 		{
 			if (FarmRows.ready(p, now))
 			{
 				ready.add(p);
 			}
-			else if (p.readyAt > now && (next == null || p.readyAt < next.readyAt))
-			{
-				next = p;
-			}
 		}
+		Routines.Patch next = FarmRows.next(ps, now);
 		// Stops with something ready, in run order: "1 Ardougne cloak 2  2 Camelot Teleport".
 		Map<String, Routines.Patch> stops = new LinkedHashMap<>();
 		for (Routines.Patch p : ready)
@@ -789,9 +791,9 @@ class GoalTracker
 			tip.append("</br>Next: ").append(Text.escapeJagex(next.region)).append(", ").append(Text.escapeJagex(next.crop)).append(" in ").append(Routines.left(next.readyAt - now));
 		}
 		BufferedImage icon = ps.get(0).itemId > 0 ? itemManager.getImage(ps.get(0).itemId) : skillIcons.getSkillImage(Skill.FARMING, true);
-		String value = !ready.isEmpty() ? ready.size() + " ready" : next == null ? "Growing" : Routines.left(next.readyAt - now);
+		String value = !ready.isEmpty() ? ready.size() + " ready" : next == null ? FarmRows.idle(ps) : Routines.left(next.readyAt - now);
 		String detail = route.length() > 0 ? route.toString() : next == null ? "" : "Next: " + next.region;
-		return new GoalOverlay.Entry(box, icon, kind, value, detail, (double) ready.size() / ps.size(), !ready.isEmpty(), tip.toString());
+		return new GoalOverlay.Entry(box, icon, kind, value, detail, FarmRows.readyShare(ps, now), !ready.isEmpty(), tip.toString());
 	}
 
 	/** A daily task that's just been done: the same pop-up and chat line as a goal. */
@@ -830,16 +832,6 @@ class GoalTracker
 			t.append("</br>Get there: ").append(Text.escapeJagex(travel));
 		}
 		return t.toString();
-	}
-
-	private static long soonest(List<Routines.Patch> ps, long now)
-	{
-		long best = Long.MAX_VALUE;
-		for (Routines.Patch p : ps)
-		{
-			best = Math.min(best, p.readyAt(now) ? 0 : p.readyAt > 0 ? p.readyAt : Long.MAX_VALUE - 1);
-		}
-		return best;
 	}
 
 	/** Swing thread. A daily task ticked off in the panel: tell Nib Tracker, and count it done here straight away. */

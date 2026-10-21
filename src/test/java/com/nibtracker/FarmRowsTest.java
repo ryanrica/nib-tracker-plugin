@@ -108,4 +108,48 @@ public class FarmRowsTest
 		// "x" wasn't offered (no data now), so it stays; "c" was unticked; "b" is new and goes last.
 		assertEquals(Arrays.asList("x", FarmGroups.CONTRACT_ID, "a", "b"), FarmRows.favouritesAfter(saved, offered, ticked));
 	}
+
+	@Test
+	public void summaryIgnoresPatchesThatArentGrowing()
+	{
+		// A diseased crop with a timer that has run out isn't "1 ready", and one still timed isn't "next".
+		assertEquals("Diseased", Routines.summary(Arrays.asList(patch("Ranarr", "diseased", NOW - MIN)), NOW));
+		assertEquals("Dead", Routines.summary(Arrays.asList(patch("Ranarr", "dead", NOW + MIN)), NOW));
+		assertEquals("Empty", Routines.summary(Arrays.asList(patch("", "empty", 0), patch("", "empty", NOW + MIN)), NOW));
+		assertEquals("Unknown", Routines.summary(Arrays.asList(patch("", "unknown", NOW + MIN)), NOW));
+		assertEquals("Diseased", Routines.summary(Arrays.asList(patch("", "empty", 0), patch("Ranarr", "diseased", NOW + MIN)), NOW));
+		assertEquals("Growing", Routines.summary(Arrays.asList(patch("", "empty", 0), patch("Guam", "growing", 0)), NOW));
+		assertEquals("next 30m", Routines.summary(Arrays.asList(patch("Ranarr", "diseased", NOW + 5 * MIN),
+			patch("", "empty", NOW + 10 * MIN), patch("Guam", "growing", NOW + 30 * MIN)), NOW));
+		assertEquals("1 ready", Routines.summary(Arrays.asList(patch("Ranarr", "dead", NOW - MIN), patch("Guam", "ready", 0)), NOW));
+	}
+
+	@Test
+	public void soonestAndNextSkipPatchesThatArentGrowing()
+	{
+		Routines.Patch diseased = patch("Ranarr", "diseased", NOW + 5 * MIN);
+		Routines.Patch empty = patch("", "empty", NOW + 10 * MIN);
+		Routines.Patch growing = patch("Guam", "growing", NOW + 30 * MIN);
+		Routines.Patch untimed = patch("Guam", "growing", 0);
+		assertEquals(0, FarmRows.soonest(patch("Guam", "ready", 0), NOW));
+		assertEquals(NOW + 30 * MIN, FarmRows.soonest(growing, NOW));
+		assertEquals(Long.MAX_VALUE, FarmRows.soonest(diseased, NOW));
+		assertEquals(Long.MAX_VALUE, FarmRows.soonest(empty, NOW));
+		// A growing crop with no timer still sorts before a region with nothing growing.
+		assertTrue(FarmRows.soonest(untimed, NOW) < FarmRows.soonest(empty, NOW));
+		assertEquals(NOW + 30 * MIN, FarmRows.soonest(Arrays.asList(diseased, empty, growing), NOW));
+		assertEquals(growing, FarmRows.next(Arrays.asList(diseased, empty, growing), NOW));
+		assertEquals(null, FarmRows.next(Arrays.asList(diseased, empty), NOW));
+	}
+
+	@Test
+	public void readyShareCountsOnlyGrowingAndReady()
+	{
+		List<Routines.Patch> ps = Arrays.asList(patch("Guam", "ready", 0), patch("Ranarr", "growing", NOW + MIN),
+			patch("", "empty", 0), patch("", "unknown", 0), patch("Torstol", "diseased", 0));
+		assertEquals(0.5, FarmRows.readyShare(ps, NOW), 0.0001);
+		assertTrue(FarmRows.anyGrowing(ps));
+		assertFalse(FarmRows.anyGrowing(Arrays.asList(patch("", "empty", 0), patch("Torstol", "dead", 0))));
+		assertEquals(0, FarmRows.readyShare(Arrays.asList(patch("", "empty", 0)), NOW), 0.0001);
+	}
 }

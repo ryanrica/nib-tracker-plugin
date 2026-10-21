@@ -174,27 +174,19 @@ final class Routines
 		return (h / 24) + "d " + (h % 24) + "h";
 	}
 
-	/** A region's line: how many are ready, or how long until the next one is. */
+	/**
+	 * A region's line: how many are ready, or how long until the next growing one is; with neither, Growing, Diseased,
+	 * Dead, Empty or Unknown (a timer on a patch that isn't growing means nothing).
+	 */
 	static String summary(List<Patch> patches, long now)
 	{
-		int ready = 0;
-		long next = Long.MAX_VALUE;
-		for (Patch p : patches)
-		{
-			if (p.readyAt(now))
-			{
-				ready++;
-			}
-			else if (p.readyAt > 0)
-			{
-				next = Math.min(next, p.readyAt);
-			}
-		}
+		long ready = patches.stream().filter(p -> FarmRows.ready(p, now)).count();
 		if (ready > 0)
 		{
 			return ready + " ready";
 		}
-		return next == Long.MAX_VALUE ? "Growing" : "next " + left(next - now);
+		Patch next = FarmRows.next(patches, now);
+		return next == null ? FarmRows.idle(patches) : "next " + left(next.readyAt - now);
 	}
 
 	private static List<JsonObject> objects(JsonElement e, int max)

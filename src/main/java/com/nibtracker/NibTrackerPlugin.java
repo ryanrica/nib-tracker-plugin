@@ -290,6 +290,12 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	@Subscribe
 	public void onConfigChanged(ConfigChanged e)
 	{
+		// Time Tracking's contract (a new one from Jane, or one handed in) changes the Farming tab's contract row.
+		if ("timetracking".equals(e.getGroup()) && "contract".equals(e.getKey()))
+		{
+			goals.refresh();
+			return;
+		}
 		if (!NibTrackerConfig.GROUP.equals(e.getGroup()))
 		{
 			return;
