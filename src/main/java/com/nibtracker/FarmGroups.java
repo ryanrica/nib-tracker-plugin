@@ -117,6 +117,12 @@ final class FarmGroups
 		CONTRACTS.put(itemId, new Contract(crop, kind, itemId));
 	}
 
+	/** Whether the All list shows this patch; a hidden region drops out of it (favourites ignore this). */
+	static boolean shownInAll(Routines.Patch p, Set<String> hidden)
+	{
+		return !hidden.contains(p.region);
+	}
+
 	static boolean special(String kind)
 	{
 		return SPECIAL.contains(kind);

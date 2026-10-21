@@ -189,6 +189,15 @@ public interface NibTrackerConfig extends Config
 		return "";
 	}
 
+	/* Favourites per tab, saved by Favourites.write. */
+	String FAVOURITES = "favourites";
+
+	@ConfigItem(keyName = FAVOURITES, name = "", description = "", hidden = true)
+	default String favourites()
+	{
+		return "";
+	}
+
 	@ConfigItem(
 		keyName = "sendScreenshots",
 		name = "Bingo screenshots",

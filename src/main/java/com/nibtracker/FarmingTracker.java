@@ -52,6 +52,24 @@ class FarmingTracker
 		}
 	}
 
+	/** The item id of the Farming Guild contract you hold, from Time Tracking; 0 when none. */
+	int contractItemId()
+	{
+		String value = configManager.getRSProfileConfiguration(GROUP, "contract");
+		if (value == null)
+		{
+			return 0;
+		}
+		try
+		{
+			return Integer.parseInt(value.trim());
+		}
+		catch (NumberFormatException e)
+		{
+			return 0;
+		}
+	}
+
 	/** Also called at logout, so timers planted just before logging out are sent. */
 	void send()
 	{
