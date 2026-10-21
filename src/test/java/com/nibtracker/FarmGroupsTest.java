@@ -40,6 +40,11 @@ public class FarmGroupsTest
 	{
 		assertTrue(FarmGroups.special("seaweed"));
 		assertFalse(FarmGroups.special("herb"));
+		assertFalse(FarmGroups.special("celastrus"));
+		for (String k : new String[]{"hespori", "anima", "belladonna", "cactus", "seaweed", "mushroom", "calquat"})
+		{
+			assertTrue(k, FarmGroups.special(k));
+		}
 	}
 
 	@Test

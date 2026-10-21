@@ -13,7 +13,7 @@ import net.runelite.api.gameval.ItemID;
 final class FarmGroups
 {
 	static final Set<String> SPECIAL = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-		"seaweed", "mushroom", "calquat", "belladonna", "anima", "hespori", "celastrus", "cactus")));
+		"seaweed", "mushroom", "calquat", "belladonna", "anima", "hespori", "cactus")));
 	static final Set<String> TREES = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
 		"tree", "hardwood", "redwood")));
 	static final String CONTRACT_ID = "farming:contract";
