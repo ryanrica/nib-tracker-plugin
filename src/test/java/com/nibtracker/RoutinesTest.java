@@ -27,6 +27,23 @@ public class RoutinesTest
 	}
 
 	@Test
+	public void readsKeyItemIdAndCondition()
+	{
+		List<Routines.Daily> d = Routines.dailies(new JsonParser().parse(
+			"[{\"id\":\"m\",\"key\":\"miscellania\",\"label\":\"Miscellania\",\"cadence\":\"condition\",\"every\":1,\"due\":true,\"itemId\":8150},"
+				+ "{\"id\":\"z\",\"label\":\"Zaff\",\"cadence\":\"daily\",\"dueAt\":5}]"));
+		Routines.Daily m = d.get(0);
+		assertEquals("miscellania", m.key);
+		assertEquals(8150, m.itemId);
+		assertEquals("condition", m.cadence);
+		assertEquals(Boolean.TRUE, m.due);
+		Routines.Daily z = d.get(1);
+		assertEquals("", z.key);
+		assertEquals(0, z.itemId);
+		assertEquals(null, z.due);
+	}
+
+	@Test
 	public void feedWithoutStateIsGrowingOrReady()
 	{
 		List<Routines.Patch> f = Routines.farm(new JsonParser().parse(

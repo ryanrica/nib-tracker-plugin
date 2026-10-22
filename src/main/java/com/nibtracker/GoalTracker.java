@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.awt.Color;
-import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
@@ -33,8 +32,10 @@ import net.runelite.api.Quest;
 import net.runelite.api.Skill;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.StatChanged;
+import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.ItemID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatColorType;
 import net.runelite.client.chat.ChatMessageBuilder;
@@ -116,7 +117,13 @@ class GoalTracker
 	/* Titles in on-screen hover text. */
 	private static final Color TIP_TITLE = new Color(0xFF, 0x98, 0x1F);
 	private long lastMinute;
-	private static BufferedImage calendar;
+	/* Claim flags already counted (task keys), until the daily reset puts them back to 0. */
+	private final Set<String> signalSent = new HashSet<>();
+	/* Miscellania as the game last said (due or not), and as last told to Nib Tracker; null when not known. */
+	private Boolean misc;
+	private Boolean miscSent;
+	/* Tears of Guthix: whether a game was going on at the last change. */
+	private int togCollecting;
 
 	private EventSink sink;
 	private int slayerSeen = -1;
@@ -213,6 +220,9 @@ class GoalTracker
 	{
 		dirty = true;
 		questsDirty = true;
+		// Tasks already claimed today count as done, quietly: no pop-up for what was done before logging in.
+		togCollecting = client.getVarbitValue(VarbitID.TOG_MINIGAME_COLLECTING);
+		checkDailies(false);
 	}
 
 	/** Any thread. Shows the panel again on the next tick, e.g. after the sync settings change. */
@@ -241,6 +251,10 @@ class GoalTracker
 		namesDirty = true;
 		wasDone.clear();
 		announced.clear();
+		signalSent.clear();
+		misc = null;
+		miscSent = null;
+		togCollecting = 0;
 		popup.reset();
 		overlay.set(Collections.emptyList());
 		dirty = true;
@@ -265,6 +279,10 @@ class GoalTracker
 				questsDirty = true;
 			}
 			dailies = Routines.dailies(settings.get("dailies"));
+			if (sink.active())
+			{
+				checkDailies(false); // tasks claimed before the feed came count now, quietly
+			}
 			feedFarm = Routines.farm(settings.get("farm"));
 			JsonElement aliases = settings.get("kcAliases");
 			if (aliases != null && aliases.isJsonObject())
@@ -456,13 +474,7 @@ class GoalTracker
 		Map<String, Long> dueAt = new HashMap<>();
 		for (Routines.Daily d : sorted)
 		{
-			Long mine = tickedOff.get(d.id);
-			if (mine != null && d.dueAt >= mine)
-			{
-				tickedOff.remove(d.id); // Nib Tracker has it now
-				mine = null;
-			}
-			dueAt.put(d.id, Math.max(d.dueAt, mine == null ? 0 : mine));
+			dueAt.put(d.id, dueAt(d));
 		}
 		sorted.sort(Comparator.comparing((Routines.Daily d) -> dueAt.get(d.id) > now).thenComparing(d -> d.label));
 		List<Routines.Daily> dueNow = new ArrayList<>();
@@ -480,7 +492,7 @@ class GoalTracker
 			{
 				dueNow.add(d);
 			}
-			x.dailies.add(new GoalsPanel.DailyView(d.id, d.label, isDue ? "Due" : "Resets in " + Routines.left(at - now), d.how, isDue));
+			x.dailies.add(new GoalsPanel.DailyView(d.id, d.label, status(d, at, now), d.how, isDue, DailySignals.icon(d)));
 		}
 		// On screen only while something is due: done for the day, it goes away by itself.
 		if (x.dailiesPinned && !dueNow.isEmpty())
@@ -494,7 +506,7 @@ class GoalTracker
 					tip.append("</br>").append(Text.escapeJagex(d.how));
 				}
 			}
-			onScreen.add(new GoalOverlay.Entry(LEGACY_BOX + DAILIES, calendarIcon(), "Daily tasks", dueNow.size() + " due", dueNow.get(0).label + (dueNow.size() > 1 ? " +" + (dueNow.size() - 1) + " more" : ""),
+			onScreen.add(new GoalOverlay.Entry(LEGACY_BOX + DAILIES, itemManager.getImage(DailySignals.icon(dueNow.get(0))), "Daily tasks", dueNow.size() + " due", dueNow.get(0).label + (dueNow.size() > 1 ? " +" + (dueNow.size() - 1) + " more" : ""),
 				(double) (sorted.size() - dueNow.size()) / sorted.size(), false, tip.toString()));
 		}
 
@@ -806,12 +818,42 @@ class GoalTracker
 		return new GoalOverlay.Entry(box, icon, v.title, v.value, v.sub, v.progress, v.ready, tip.toString());
 	}
 
-	/** One daily task on the game screen: Due (in green), or when it resets. */
-	private static GoalOverlay.Entry dailyEntry(Routines.Daily d, long at, long now, String box)
+	/** One daily task on the game screen, with its item: Due (in green), or when it resets. */
+	private GoalOverlay.Entry dailyEntry(Routines.Daily d, long at, long now, String box)
 	{
 		boolean due = at <= now;
 		String tip = ColorUtil.wrapWithColorTag(Text.escapeJagex(d.label), TIP_TITLE) + (d.how.isEmpty() ? "" : "</br>" + Text.escapeJagex(d.how));
-		return new GoalOverlay.Entry(box, calendarIcon(), d.label, due ? "Due" : "Resets in " + Routines.left(at - now), d.how, -1, due, tip);
+		return new GoalOverlay.Entry(box, itemManager.getImage(DailySignals.icon(d)), d.label, status(d, at, now), d.how, -1, due, tip);
+	}
+
+	/** Due, or when it's next due; a by-approval task (Miscellania) has no timer, so it's Topped up instead. */
+	private static String status(Routines.Daily d, long at, long now)
+	{
+		if (at <= now)
+		{
+			return "Due";
+		}
+		return d.condition() ? "Topped up" : "Resets in " + Routines.left(at - now);
+	}
+
+	/**
+	 * When a task is next due (epoch ms): Nib Tracker's time, or later if it was ticked off here since. A by-approval
+	 * task is due now (0) or never (Long.MAX_VALUE), from what the game last said, else from Nib Tracker.
+	 */
+	private long dueAt(Routines.Daily d)
+	{
+		if (d.condition())
+		{
+			boolean due = DailySignals.MISCELLANIA.equals(d.key) && misc != null ? misc : Boolean.TRUE.equals(d.due);
+			return due ? 0 : Long.MAX_VALUE;
+		}
+		Long mine = tickedOff.get(d.id);
+		if (mine != null && d.dueAt >= mine)
+		{
+			tickedOff.remove(d.id); // Nib Tracker has it now
+			mine = null;
+		}
+		return Math.max(d.dueAt, mine == null ? 0 : mine);
 	}
 
 	/** One kind of patch on screen: ready count (or time to the next), and the run in order with each stop's teleport. */
@@ -905,17 +947,118 @@ class GoalTracker
 			{
 				if (d.id.equals(id))
 				{
-					long now = System.currentTimeMillis();
-					tickedOff.put(id, Routines.nextDue(d, now));
-					JsonObject data = new JsonObject();
-					data.addProperty("id", d.id);
-					data.addProperty("label", d.label);
-					sink.emit("chore_done", data);
-					dirty = true;
+					markDone(d);
 					return;
 				}
 			}
 		});
+	}
+
+	/** Tells Nib Tracker a task is done (chore_done), and counts it done here until Nib Tracker's copy catches up. */
+	private void markDone(Routines.Daily d)
+	{
+		if (d.condition() && DailySignals.MISCELLANIA.equals(d.key))
+		{
+			misc = false; // topped up; the game's next reading says otherwise if not
+		}
+		else
+		{
+			tickedOff.put(d.id, Routines.nextDue(d, System.currentTimeMillis()));
+		}
+		JsonObject data = new JsonObject();
+		data.addProperty("id", d.id);
+		if (!d.key.isEmpty())
+		{
+			data.addProperty("key", d.key);
+		}
+		data.addProperty("label", d.label);
+		sink.emit("chore_done", data);
+		dirty = true;
+	}
+
+	/**
+	 * A task the game says is done: ticked off as if from the panel, if it's still due. Live, the pop-up and chat line
+	 * follow as for any task done while due; quiet (at login, or when the feed arrives) it's just counted done.
+	 */
+	private void gameDone(Routines.Daily d, boolean live)
+	{
+		if (dueAt(d) > System.currentTimeMillis())
+		{
+			return; // done already, here or in Nib Tracker
+		}
+		if (!live)
+		{
+			dailyWasDue.put(d.id, false);
+		}
+		markDone(d);
+	}
+
+	/**
+	 * Client thread, logged in. Reads the game's claim flags and Miscellania's approval, and ticks off what's newly done.
+	 * Live is for a varbit that just changed; quiet is for login and new settings.
+	 */
+	private void checkDailies(boolean live)
+	{
+		Set<String> claimed = DailySignals.claimedToday(client::getVarbitValue, client::getVarpValue);
+		signalSent.retainAll(claimed); // a flag back to 0 is the daily reset: it can count again
+		for (Routines.Daily d : DailySignals.newlyDone(claimed, signalSent, dailies))
+		{
+			gameDone(d, live);
+		}
+		Boolean m = DailySignals.miscellaniaDue(client::getVarbitValue, client::getVarpValue);
+		if (m != null && !m.equals(misc))
+		{
+			misc = m;
+			dirty = true;
+		}
+		for (Routines.Daily d : dailies)
+		{
+			if (DailySignals.MISCELLANIA.equals(d.key) && d.condition() && misc != null)
+			{
+				if (!live)
+				{
+					dailyWasDue.put(d.id, misc);
+				}
+				// Tell Nib Tracker when the game and it disagree, once per change.
+				if (!misc.equals(d.due) && !misc.equals(miscSent))
+				{
+					JsonObject data = new JsonObject();
+					data.addProperty("key", d.key);
+					data.addProperty("due", misc);
+					sink.emit("chore_state", data);
+				}
+				miscSent = misc;
+			}
+		}
+	}
+
+	@Subscribe
+	public void onVarbitChanged(VarbitChanged e)
+	{
+		if (!sink.active())
+		{
+			return;
+		}
+		int varbit = e.getVarbitId();
+		if (varbit == VarbitID.TOG_MINIGAME_COLLECTING)
+		{
+			int before = togCollecting;
+			togCollecting = e.getValue();
+			if (DailySignals.tearsPlayed(before, togCollecting))
+			{
+				for (Routines.Daily d : dailies)
+				{
+					if (DailySignals.TEARS.equals(d.key))
+					{
+						gameDone(d, true);
+					}
+				}
+			}
+		}
+		if (varbit != -1 ? DailySignals.VARBITS.contains(varbit) : DailySignals.VARPS.contains(e.getVarpId()))
+		{
+			checkDailies(true);
+		}
 	}
 
 	/** Swing thread. Shows a farming region in the panel, or hides it; remembered in the plugin's settings. */
@@ -948,32 +1091,6 @@ class GoalTracker
 			}
 		}
 		return out;
-	}
-
-	/** The icon for daily tasks (panel tab and game screen): a small calendar, drawn once. */
-	static synchronized BufferedImage calendarIcon()
-	{
-		if (calendar == null)
-		{
-			BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
-			Graphics2D g = img.createGraphics();
-			g.setColor(new Color(0xE8, 0xE2, 0xD0));
-			g.fillRect(1, 3, 14, 12);
-			g.setColor(new Color(0xC8, 0x4B, 0x3C));
-			g.fillRect(1, 1, 14, 4);
-			g.setColor(new Color(0x3A, 0x2A, 0x14));
-			g.drawRect(1, 1, 13, 13);
-			for (int i = 0; i < 3; i++)
-			{
-				for (int j = 0; j < 3; j++)
-				{
-					g.fillRect(3 + i * 4, 7 + j * 3, 2, 2);
-				}
-			}
-			g.dispose();
-			calendar = img;
-		}
-		return calendar;
 	}
 
 	/**

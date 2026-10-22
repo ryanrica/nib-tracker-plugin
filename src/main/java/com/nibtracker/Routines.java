@@ -32,6 +32,12 @@ final class Routines
 		final long dueAt;
 		/* What to do or collect, from Nib Tracker, or empty. */
 		String how = "";
+		/* The built-in task it is (zaff_staves...), so the game can tick it off; empty for a task the player named. */
+		String key = "";
+		/* Its icon item, from Nib Tracker; 0 when the feed has none (see DailySignals.icon). */
+		int itemId;
+		/* For a "condition" task (Miscellania): whether it's due now. Null for every other cadence. */
+		Boolean due;
 
 		Daily(String id, String label, String cadence, int every, long dueAt)
 		{
@@ -40,6 +46,11 @@ final class Routines
 			this.cadence = cadence;
 			this.every = every;
 			this.dueAt = dueAt;
+		}
+
+		boolean condition()
+		{
+			return "condition".equals(cadence);
 		}
 	}
 
@@ -109,6 +120,13 @@ final class Routines
 			{
 				Daily d = new Daily(id, label, cadence, (int) Math.max(1, num(o, "every")), (long) num(o, "dueAt"));
 				d.how = str(o, "how");
+				d.key = str(o, "key");
+				d.itemId = (int) num(o, "itemId");
+				if (d.condition())
+				{
+					JsonElement due = o.get("due");
+					d.due = due != null && due.isJsonPrimitive() && due.getAsJsonPrimitive().isBoolean() && due.getAsBoolean();
+				}
 				out.add(d);
 			}
 		}

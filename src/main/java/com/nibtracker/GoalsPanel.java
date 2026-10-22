@@ -126,7 +126,7 @@ class GoalsPanel extends PluginPanel
 		String id = "";
 		String favTab;
 		String pinId;
-		/* Puts the row's real icon in the 28px slot (a goal's skill or item, a crop, the calendar); null leaves it empty. */
+		/* Puts the row's real icon in the 28px slot (a goal's skill or item, a crop, a daily task's item); null leaves it empty. */
 		Consumer<JLabel> icon;
 		String title = "";
 		/* Wrap a long title onto more lines instead of cutting it short (the contract's). */
@@ -423,9 +423,9 @@ class GoalsPanel extends PluginPanel
 			tab.setIcon(new ImageIcon(fitTo(LOGO, 22)));
 			return;
 		}
-		if (DAILIES.equals(v))
+		if (DAILIES.equals(v) && itemManager != null)
 		{
-			tab.setIcon(new ImageIcon(fitTo(GoalTracker.calendarIcon(), 22)));
+			itemIcon(ItemID.BATTLESTAFF, 24, tab::setIcon);
 			return;
 		}
 		if ("Combat achievements".equals(v))
@@ -626,14 +626,17 @@ class GoalsPanel extends PluginPanel
 		final String status;
 		final String how;
 		final boolean due;
+		/* Its icon item (see DailySignals.icon). */
+		final int itemId;
 
-		DailyView(String id, String label, String status, String how, boolean due)
+		DailyView(String id, String label, String status, String how, boolean due, int itemId)
 		{
 			this.id = id;
 			this.label = label;
 			this.status = status;
 			this.how = how;
 			this.due = due;
+			this.itemId = itemId;
 		}
 	}
 
@@ -699,7 +702,7 @@ class GoalsPanel extends PluginPanel
 		String f = overview ? ALL : currentFilter();
 		if (overview)
 		{
-			JComponent header = sectionHeader(DAILIES, (int) x.dailies.stream().filter(d -> d.due).count());
+			JComponent header = sectionHeader(DAILIES, DAILIES, (int) x.dailies.stream().filter(d -> d.due).count(), headingIcon(ItemID.BATTLESTAFF));
 			header.setComponentPopupMenu(dailiesMenu(x, null));
 			inheritMenu(header);
 			list.add(header);
@@ -731,7 +734,7 @@ class GoalsPanel extends PluginPanel
 		}
 	}
 
-	/** A daily task as a row: the calendar icon, its status, how to do it (on its own tab), ★ and ▣ for just this task. */
+	/** A daily task as a row: its item's icon, its status, how to do it (on its own tab), ★ and ▣ for just this task. */
 	private Card dailyCard(Extras x, DailyView d, boolean overview)
 	{
 		Card c = new Card();
@@ -740,8 +743,7 @@ class GoalsPanel extends PluginPanel
 		c.pinId = Favourites.dailyPin(d.id);
 		c.fav = favourites(DAILIES).contains(d.id);
 		c.pinned = x.pins.contains(c.pinId);
-		// Dailies carry no item of their own, so each has the calendar, as the Daily tasks tab does.
-		c.icon = l -> l.setIcon(icons.computeIfAbsent("calendar", k -> new ImageIcon(fit(GoalTracker.calendarIcon()))));
+		c.icon = itemManager != null ? l -> itemIcon(d.itemId, ICON, l::setIcon) : null;
 		c.title = d.label;
 		c.value = d.status;
 		c.edge = d.due ? AMBER : DONE;
@@ -1840,6 +1842,45 @@ class GoalsPanel extends PluginPanel
 			icons.put(key, i);
 			set.accept(i);
 		});
+	}
+
+	/**
+	 * An item's icon for a section heading (14px, like the ★). It draws whatever the cache holds when painted, so the
+	 * heading shows it as soon as it loads; null without an item manager.
+	 */
+	private Icon headingIcon(int item)
+	{
+		if (itemManager == null)
+		{
+			return null;
+		}
+		int size = 14;
+		String key = "item:" + item + ":" + size;
+		itemIcon(item, size, i -> list.repaint());
+		return new Icon()
+		{
+			@Override
+			public void paintIcon(Component c, Graphics g, int x, int y)
+			{
+				Icon i = icons.get(key);
+				if (i != null)
+				{
+					i.paintIcon(c, g, x, y);
+				}
+			}
+
+			@Override
+			public int getIconWidth()
+			{
+				return size;
+			}
+
+			@Override
+			public int getIconHeight()
+			{
+				return size;
+			}
+		};
 	}
 
 	/** An image scaled to fit a square of this size, keeping its shape. */
