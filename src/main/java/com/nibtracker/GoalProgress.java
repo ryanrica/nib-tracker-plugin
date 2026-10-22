@@ -69,6 +69,12 @@ final class GoalProgress
 			return v != null && v.isJsonPrimitive() ? v.getAsString() : "";
 		}
 
+		/* The item's id from the web app (already the charged item for inert ones), or 0 when it sent none. */
+		int itemId()
+		{
+			return (int) num("itemId", 0);
+		}
+
 		double num(String key, double fallback)
 		{
 			JsonElement v = params.get(key);

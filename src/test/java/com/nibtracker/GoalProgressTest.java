@@ -22,6 +22,14 @@ public class GoalProgressTest
 	}
 
 	@Test
+	public void itemGoalCarriesItemId()
+	{
+		GoalProgress.Goal g = goal("{\"id\":\"g\",\"type\":\"clog_item\",\"params\":{\"item\":\"Pendant of ates (inert)\",\"itemId\":12345}}");
+		assertEquals(12345, g.itemId());
+		assertEquals(0, goal("{\"id\":\"h\",\"type\":\"clog_item\",\"params\":{\"item\":\"Abyssal whip\"}}").itemId());
+	}
+
+	@Test
 	public void parseSkipsMalformedAndCaps()
 	{
 		StringBuilder sb = new StringBuilder("[1, {\"title\":\"no id\",\"type\":\"kc\"}, {\"id\":\"x\"}");

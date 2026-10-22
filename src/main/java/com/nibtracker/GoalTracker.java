@@ -1226,7 +1226,7 @@ class GoalTracker
 		}
 		else
 		{
-			int id = r.item == null ? r.fallbackItem : itemIds.computeIfAbsent(r.item.toLowerCase(Locale.ROOT), k -> {
+			int id = r.itemId > 0 ? r.itemId : r.item == null ? r.fallbackItem : itemIds.computeIfAbsent(r.item.toLowerCase(Locale.ROOT), k -> {
 				for (ItemPrice p : itemManager.search(r.item))
 				{
 					if (p.getName().equalsIgnoreCase(r.item))
@@ -1272,6 +1272,7 @@ class GoalTracker
 		}
 		GoalsPanel.Row row = new GoalsPanel.Row(g.id, category, g.title, r.detail, r.hint, r.progress, r.done, g.points, skill,
 			item == null || item.isEmpty() ? null : item, GoalsPanel.fallbackItem(category), link(g, planner));
+		row.itemId = item == null ? 0 : g.itemId();
 		row.parent = g.parent;
 		row.serverDone = g.done;
 		row.partsDone = g.partsDone;

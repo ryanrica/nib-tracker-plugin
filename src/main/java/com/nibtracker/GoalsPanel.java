@@ -83,6 +83,8 @@ class GoalsPanel extends PluginPanel
 		final String item;
 		final int fallbackItem;
 		final String link;
+		/* The item's id when the web app sent one (works for untradeable items), else 0 and the name is searched. */
+		int itemId;
 		/* The main goal this is part of (or empty); whether the web app already counts it done; for a main goal, its
 		   parts done and in total as the web app counted them. */
 		String parent = "";
@@ -1710,7 +1712,11 @@ class GoalsPanel extends PluginPanel
 			return;
 		}
 		int id = r.fallbackItem;
-		if (r.item != null)
+		if (r.itemId > 0)
+		{
+			id = r.itemId;
+		}
+		else if (r.item != null)
 		{
 			for (ItemPrice p : itemManager.search(r.item))
 			{
