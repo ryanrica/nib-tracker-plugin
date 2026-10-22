@@ -77,4 +77,11 @@ public class FavouritesTest
 		assertFalse(FarmGroups.shownInAll(p, new HashSet<>(Arrays.asList("Ardougne"))));
 		assertTrue(FarmGroups.shownInAll(p, Collections.emptySet()));
 	}
+
+	@Test
+	public void regionPinIsDistinct()
+	{
+		assertEquals("farm:region:Farming Guild", Favourites.regionPin("Farming Guild"));
+		assertFalse(Favourites.isLegacyKindPin(Favourites.regionPin("Farming Guild")));
+	}
 }

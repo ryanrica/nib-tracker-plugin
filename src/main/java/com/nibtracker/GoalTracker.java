@@ -9,6 +9,7 @@ import java.awt.image.BufferedImage;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -617,7 +618,7 @@ class GoalTracker
 		List<GoalsPanel.Row> rows, List<Routines.Daily> dailyList, Map<String, Long> dueAt)
 	{
 		String dailyPrefix = Favourites.dailyPin(""), patchPrefix = Favourites.patchPin(""), kindPrefix = Favourites.kindPin("");
-		String favPrefix = Favourites.groupPin("");
+		String favPrefix = Favourites.groupPin(""), regionPrefix = Favourites.regionPin("");
 		Map<String, Routines.Patch> patches = new HashMap<>();
 		for (Routines.Patch p : farm)
 		{
@@ -676,12 +677,48 @@ class GoalTracker
 					onScreen.add(kindEntry(label, label, ps, now));
 				}
 			}
+			else if (pin.startsWith(regionPrefix))
+			{
+				// A single location (Farming Guild): only while it has patches.
+				for (Map.Entry<String, List<Routines.Patch>> e : pinnedRegions(Collections.singleton(pin), farm).entrySet())
+				{
+					onScreen.add(kindEntry(e.getKey(), e.getKey(), e.getValue(), now));
+				}
+			}
 			else if (pin.startsWith(favPrefix))
 			{
 				String tab = pin.substring(favPrefix.length());
 				favouritesBox(tab, x.favourites.getOrDefault(tab, Collections.emptySet()), now, onScreen, x, rows, patches, daily, dueAt);
 			}
 		}
+	}
+
+	/** The patches of each region pinned with a farm:region: pin, by region name. A region with no patches isn't there. */
+	static Map<String, List<Routines.Patch>> pinnedRegions(Collection<String> pins, List<Routines.Patch> farm)
+	{
+		String prefix = Favourites.regionPin("");
+		Map<String, List<Routines.Patch>> out = new LinkedHashMap<>();
+		for (String pin : pins)
+		{
+			if (!pin.startsWith(prefix))
+			{
+				continue;
+			}
+			String region = pin.substring(prefix.length());
+			List<Routines.Patch> ps = new ArrayList<>();
+			for (Routines.Patch p : farm)
+			{
+				if (region.equals(p.region))
+				{
+					ps.add(p);
+				}
+			}
+			if (!ps.isEmpty())
+			{
+				out.put(region, ps);
+			}
+		}
+		return out;
 	}
 
 	/** A tab's favourites list on the game screen, live: one line per favourite, ready (or due) ones first. */

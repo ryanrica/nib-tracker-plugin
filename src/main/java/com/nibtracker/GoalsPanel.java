@@ -821,10 +821,10 @@ class GoalsPanel extends PluginPanel
 				farmFavourites(x);
 				break;
 			case SPECIAL:
-				farmGroup(x, SPECIAL, Favourites.SPECIAL_PIN, FarmGroups::special, "No special patches with timers yet.");
+				farmGroup(x, SPECIAL, Favourites.SPECIAL_PIN, FarmGroups::special, "No special patches with timers yet.", true);
 				break;
 			case ALL_TREES:
-				farmGroup(x, ALL_TREES, Favourites.TREES_PIN, FarmGroups::tree, "No tree patches with timers yet.");
+				farmGroup(x, ALL_TREES, Favourites.TREES_PIN, FarmGroups::tree, "No tree patches with timers yet.", false);
 				break;
 			case CONTRACT:
 				if (x.contract != null)
@@ -888,6 +888,8 @@ class GoalsPanel extends PluginPanel
 			};
 			JPopupMenu m = farmMenu(x);
 			m.insert(item("Hide " + r.name, () -> onRegion.accept(r.name)), 0);
+			String regionPin = Favourites.regionPin(r.name);
+			m.insert(item(x.pins.contains(regionPin) ? "Remove from game screen" : "Show on game screen", () -> onPin.accept(regionPin)), 0);
 			row.menu = m;
 			list.add(card(row, 0));
 			if (open)
@@ -963,8 +965,8 @@ class GoalsPanel extends PluginPanel
 		}
 	}
 
-	/** Special or All trees: their patches, hidden regions too (hiding is for All patches only), under a heading per kind. */
-	private void farmGroup(Extras x, String name, String pin, Predicate<String> kinds, String none)
+	/** Special (under a heading per kind) or All trees (one flat list, ready first): hidden regions too (hiding is for All patches only). */
+	private void farmGroup(Extras x, String name, String pin, Predicate<String> kinds, String none, boolean byKind)
 	{
 		List<PatchView> ps = new ArrayList<>();
 		for (PatchView p : x.patches)
@@ -985,12 +987,20 @@ class GoalsPanel extends PluginPanel
 			list.add(note(none));
 			return;
 		}
-		Map<String, List<PatchView>> byKind = new TreeMap<>();
+		if (!byKind)
+		{
+			for (PatchView p : FarmRows.readyFirst(ps, v -> v.ready))
+			{
+				list.add(card(patchCard(x, p), 0));
+			}
+			return;
+		}
+		Map<String, List<PatchView>> groups = new TreeMap<>();
 		for (PatchView p : ps)
 		{
-			byKind.computeIfAbsent(p.kindLabel.isEmpty() ? p.kind : p.kindLabel, k -> new ArrayList<>()).add(p);
+			groups.computeIfAbsent(p.kindLabel.isEmpty() ? p.kind : p.kindLabel, k -> new ArrayList<>()).add(p);
 		}
-		for (Map.Entry<String, List<PatchView>> e : byKind.entrySet())
+		for (Map.Entry<String, List<PatchView>> e : groups.entrySet())
 		{
 			list.add(subHeader(e.getKey(), e.getValue().size()));
 			for (PatchView p : FarmRows.readyFirst(e.getValue(), v -> v.ready))

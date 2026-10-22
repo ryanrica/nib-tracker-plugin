@@ -94,6 +94,11 @@ final class Favourites
 		return "fav:" + tab;
 	}
 
+	static String regionPin(String region)
+	{
+		return "farm:region:" + region;
+	}
+
 	static String kindPin(String key)
 	{
 		return "farming:kind:" + key;

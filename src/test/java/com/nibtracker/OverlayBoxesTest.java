@@ -76,4 +76,20 @@ public class OverlayBoxesTest
 		assertEquals("★ Farming favourites · 1 ready", GoalOverlay.heading("★ Farming favourites",
 			Collections.singletonList(entry("★ Farming favourites", "Ranarr", true))));
 	}
+
+	private static Routines.Patch patch(String region, String name)
+	{
+		return new Routines.Patch(region, name, "herb", "Ranarr", 0, 0, true);
+	}
+
+	@Test
+	public void regionPinShowsOnlyThatRegion()
+	{
+		List<Routines.Patch> farm = Arrays.asList(patch("Farming Guild", "Herb"), patch("Catherby", "Herb"), patch("Farming Guild", "Tree"));
+		Map<String, List<Routines.Patch>> shown = GoalTracker.pinnedRegions(
+			Collections.singleton(Favourites.regionPin("Farming Guild")), farm);
+		assertEquals(1, shown.size());
+		assertEquals(Arrays.asList(farm.get(0), farm.get(2)), shown.get("Farming Guild"));
+		assertTrue(GoalTracker.pinnedRegions(Collections.singleton(Favourites.regionPin("Falador")), farm).isEmpty());
+	}
 }
