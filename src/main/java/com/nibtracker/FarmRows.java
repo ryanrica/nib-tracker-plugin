@@ -2,8 +2,11 @@ package com.nibtracker;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -243,5 +246,61 @@ final class FarmRows
 			}
 		}
 		return new ArrayList<>(out);
+	}
+
+	/**
+	 * The patches worked out here, each with the way there and its stop in the run from the feed row with the same id,
+	 * then the feed's rows with no patch here (special patches it lists as unknown), as they are. With no feed, or one
+	 * that's older, the rows still show, without travel tips.
+	 */
+	static List<Routines.Patch> merge(List<Routines.Patch> local, List<Routines.Patch> feed)
+	{
+		Map<String, Routines.Patch> byId = new HashMap<>();
+		for (Routines.Patch f : feed)
+		{
+			byId.putIfAbsent(f.id(), f);
+		}
+		List<Routines.Patch> out = new ArrayList<>();
+		Set<String> mine = new HashSet<>();
+		for (Routines.Patch p : local)
+		{
+			mine.add(p.id());
+			Routines.Patch f = byId.get(p.id());
+			if (f != null)
+			{
+				p = copy(p);
+				p.travel = f.travel;
+				p.travelHow = f.travelHow;
+				p.travelCat = f.travelCat;
+				p.travelItem = f.travelItem;
+				p.order = f.order;
+			}
+			out.add(p);
+		}
+		for (Routines.Patch f : feed)
+		{
+			if (!mine.contains(f.id()))
+			{
+				out.add(f);
+			}
+		}
+		return out;
+	}
+
+	/** A copy, so merging leaves the rows it was given as they were. */
+	private static Routines.Patch copy(Routines.Patch p)
+	{
+		Routines.Patch c = new Routines.Patch(p.region, p.name, p.type, p.crop, p.itemId, p.readyAt, p.ready);
+		c.travel = p.travel;
+		c.travelHow = p.travelHow;
+		c.kind = p.kind;
+		c.kindLabel = p.kindLabel;
+		c.run = p.run;
+		c.order = p.order;
+		c.travelCat = p.travelCat;
+		c.travelItem = p.travelItem;
+		c.state = p.state;
+		c.progress = p.progress;
+		return c;
 	}
 }

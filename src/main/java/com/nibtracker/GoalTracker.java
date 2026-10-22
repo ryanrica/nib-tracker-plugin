@@ -1,5 +1,6 @@
 package com.nibtracker;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.awt.Color;
@@ -87,6 +88,9 @@ class GoalTracker
 	@Inject
 	private FarmingTracker farmingTracker;
 
+	@Inject
+	private Gson gson;
+
 	/* The id the current Slayer task has in the panel and on screen. */
 	static final String SLAYER_TASK = "slayer-task";
 	/* Ids for the daily tasks and farming icons on the game screen. */
@@ -101,7 +105,10 @@ class GoalTracker
 
 	/* Daily tasks and farm timers from the server; tasks ticked off here (id -> when next due) until the server has them. */
 	private List<Routines.Daily> dailies = Collections.emptyList();
+	private List<Routines.Patch> feedFarm = Collections.emptyList();
+	/* The patches shown: worked out here from Time Tracking, with the feed's travel and run order (see farmRows). */
 	private List<Routines.Patch> farm = Collections.emptyList();
+	private PatchPredictor predictor;
 	private final Map<String, Long> tickedOff = new HashMap<>();
 	/* Whether each daily task was due when last looked at, so one getting done can have a pop-up. */
 	private final Map<String, Boolean> dailyWasDue = new HashMap<>();
@@ -150,6 +157,10 @@ class GoalTracker
 		panel.onRegion(this::toggleRegion);
 		panel.onRegionsSet(this::setHiddenRegions);
 		panel.onFavouritesSet(this::setFavourites);
+		if (predictor == null)
+		{
+			predictor = PatchPredictor.load(gson); // the tables in the jar, read once and off the client thread
+		}
 		dirty = true;
 	}
 
@@ -253,7 +264,7 @@ class GoalTracker
 				questsDirty = true;
 			}
 			dailies = Routines.dailies(settings.get("dailies"));
-			farm = Routines.farm(settings.get("farm"));
+			feedFarm = Routines.farm(settings.get("farm"));
 			JsonElement aliases = settings.get("kcAliases");
 			if (aliases != null && aliases.isJsonObject())
 			{
@@ -412,11 +423,26 @@ class GoalTracker
 	}
 
 	/**
+	 * The farm patches: worked out here from Time Tracking's saved data so they're current without the website open,
+	 * each joined to the feed's row for its travel and run order. Only while linked and farming timers are on, as
+	 * before; otherwise the feed's rows as they came.
+	 */
+	private List<Routines.Patch> farmRows(long now)
+	{
+		if (!received || predictor == null || !sink.allowed("farming", config.sendFarming()))
+		{
+			return feedFarm;
+		}
+		return FarmRows.merge(predictor.predict(farmingTracker.entries(), now), feedFarm);
+	}
+
+	/**
 	 * Daily tasks and farm timers for the panel, and their icons on the game screen if chosen. A task ticked off here
 	 * counts as done until Nib Tracker's own copy catches up.
 	 */
 	private GoalsPanel.Extras extras(long now, Set<String> pins, List<GoalOverlay.Entry> onScreen, List<GoalsPanel.Row> rows)
 	{
+		farm = farmRows(now);
 		GoalsPanel.Extras x = new GoalsPanel.Extras();
 		x.dailiesOn = config.dailiesPanel();
 		x.farmOn = config.farmingPanel();

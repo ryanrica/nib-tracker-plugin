@@ -290,9 +290,14 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	@Subscribe
 	public void onConfigChanged(ConfigChanged e)
 	{
-		// Time Tracking's contract (a new one from Jane, or one handed in) changes the Farming tab's contract row.
-		if ("timetracking".equals(e.getGroup()) && "contract".equals(e.getKey()))
+		// Time Tracking saved a patch, a bird house or the contract (a new one from Jane, or one handed in): the Farming
+		// tab works its patches out again from what's saved.
+		if ("timetracking".equals(e.getGroup()))
 		{
+			if (who != null)
+			{
+				farming.read();
+			}
 			goals.refresh();
 			return;
 		}
