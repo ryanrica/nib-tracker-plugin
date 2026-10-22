@@ -1,8 +1,10 @@
 package com.nibtracker;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -23,9 +25,15 @@ import net.runelite.api.gameval.VarbitID;
  *   "30 - lumbridge_free_alchs"). The ring needs the easy Lumbridge & Draynor diary.
  * - Tears of Guthix: no var says "played this week" (the 7-day lock is kept by the server). TOG_QP_BEFORE_RETURN can't
  *   be used either: it's rewritten to the same value when you play again without a new quest point. So it's the game
- *   ending: TOG_MINIGAME_COLLECTING (the cache's tog_minigame_collecting) going from set back to 0, seen live.
+ *   ending: TOG_MINIGAME_COLLECTING (the cache's tog_minigame_collecting) going from set back to 0, seen live. Its
+ *   meaning comes from its name only, so the edge counts only if TOG_TEARS_COLLECTED went above 0 while collecting:
+ *   tears in the bowl prove a real game was played (a countdown alone would not), and a stray reset of the collecting
+ *   flag outside a game is ignored. A game with no blue tears at all isn't counted; that's left to a manual tick.
  * - Kingdom of Miscellania: approval is MISC_APPROVAL out of 127 and the coffer MISC_COFFERS; unlocked once the
- *   MISC_QUEST varp is above 0 (RuneLite's kingdomofmiscellania/KingdomPlugin.java).
+ *   MISC_QUEST varp is above 0. As in RuneLite's kingdomofmiscellania/KingdomPlugin.java, the varbits don't decay
+ *   while you're away, so a reading is trusted only in the kingdom (regions 10044 and 10300) or when approval and
+ *   coffer are both above 0; it's saved with its time, and today's approval is estimated from it: 2.5% of 127 off per
+ *   whole UTC day (1% after Royal Trouble).
  */
 final class DailySignals
 {
@@ -38,8 +46,12 @@ final class DailySignals
 	private static final int HERB_BOXES = 15;
 	private static final int FREE_ALCHS = 30;
 	/* Miscellania approval runs 0 to 127; under 90% it needs a top-up. */
-	private static final int MAX_APPROVAL = 127;
+	static final int MAX_APPROVAL = 127;
 	static final int APPROVAL_THRESHOLD = 90;
+	private static final double DECAY = 0.025;
+	private static final double DECAY_ROYAL_TROUBLE = 0.010;
+	/* Miscellania and Etceteria, where the approval varbits are current (RuneLite's KINGDOM_REGION). */
+	static final Set<Integer> KINGDOM_REGIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(10044, 10300)));
 
 	static final String TEARS = "tears_of_guthix";
 	static final String MISCELLANIA = "miscellania";
@@ -133,28 +145,43 @@ final class DailySignals
 		return out;
 	}
 
-	/** True when a Tears of Guthix game has just ended: collecting went from set back to 0. */
-	static boolean tearsPlayed(int before, int after)
+	/**
+	 * True when a Tears of Guthix game has just ended: collecting went from set back to 0, and tears were collected
+	 * during it (sawTears).
+	 */
+	static boolean tearsPlayed(int before, int after, boolean sawTears)
 	{
-		return before != 0 && after == 0;
+		return before != 0 && after == 0 && sawTears;
+	}
+
+	/** Whether a Miscellania reading is current: in the kingdom, or approval and coffer both above 0 (as RuneLite). */
+	static boolean trusted(boolean inKingdom, int approval, int coffer)
+	{
+		return inKingdom || approval > 0 && coffer > 0;
 	}
 
 	/**
-	 * Miscellania: due while approval is under 90%, not due once topped up. Null when it isn't unlocked, or nothing has
-	 * been read (approval and coffer both 0, which RuneLite's Kingdom plugin also skips).
+	 * Today's approval in percent, estimated from one read at lastChangedMs: it drops 2.5% of the maximum per whole UTC
+	 * day since (1% after Royal Trouble), never below 0.
 	 */
-	static Boolean miscellaniaDue(IntUnaryOperator varbit, IntUnaryOperator varp)
+	static double estimatedApproval(int approval, long lastChangedMs, long nowMs, boolean royalTrouble)
 	{
-		if (varp.applyAsInt(VarPlayerID.MISC_QUEST) <= 0)
+		long days = Math.max(0, nowMs / Routines.DAY - lastChangedMs / Routines.DAY);
+		double left = approval - days * (royalTrouble ? DECAY_ROYAL_TROUBLE : DECAY) * MAX_APPROVAL;
+		return Math.max(0, left) * 100 / MAX_APPROVAL;
+	}
+
+	/**
+	 * Miscellania: due while today's estimated approval is under 90%, not due once topped up. Null when it isn't
+	 * unlocked, or no trusted reading has been saved yet.
+	 */
+	static Boolean miscellaniaDue(boolean unlocked, Integer approval, long lastChangedMs, long nowMs, boolean royalTrouble)
+	{
+		if (!unlocked || approval == null)
 		{
 			return null;
 		}
-		int approval = varbit.applyAsInt(VarbitID.MISC_APPROVAL);
-		if (approval == 0 && varbit.applyAsInt(VarbitID.MISC_COFFERS) == 0)
-		{
-			return null;
-		}
-		return approval * 100 / MAX_APPROVAL < APPROVAL_THRESHOLD;
+		return estimatedApproval(approval, lastChangedMs, nowMs, royalTrouble) < APPROVAL_THRESHOLD;
 	}
 
 	/**

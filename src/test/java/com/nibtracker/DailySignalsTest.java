@@ -81,26 +81,45 @@ public class DailySignalsTest
 	}
 
 	@Test
-	public void tearsPlayedWhenCollectingEnds()
+	public void tearsPlayedWhenCollectingEndsAfterTears()
 	{
-		assertTrue(DailySignals.tearsPlayed(1, 0));
-		assertFalse(DailySignals.tearsPlayed(0, 1));
-		assertFalse(DailySignals.tearsPlayed(0, 0));
+		assertTrue(DailySignals.tearsPlayed(1, 0, true));
+		// Collecting ending with no tears seen this game: not counted.
+		assertFalse(DailySignals.tearsPlayed(1, 0, false));
+		assertFalse(DailySignals.tearsPlayed(0, 1, true));
+		assertFalse(DailySignals.tearsPlayed(0, 0, true));
+	}
+
+	private static final long NOW = 20_000 * Routines.DAY + 12 * 60 * Routines.MINUTE;
+
+	@Test
+	public void approvalDecaysByTheDay()
+	{
+		assertEquals(100, DailySignals.estimatedApproval(127, NOW, NOW, false), 0.001);
+		assertEquals(87.5, DailySignals.estimatedApproval(127, NOW - 5 * Routines.DAY, NOW, false), 0.001);
+		assertEquals(95, DailySignals.estimatedApproval(127, NOW - 5 * Routines.DAY, NOW, true), 0.001);
+		assertEquals(0, DailySignals.estimatedApproval(10, NOW - 100 * Routines.DAY, NOW, false), 0.001);
 	}
 
 	@Test
 	public void miscellaniaBelow90IsDue()
 	{
-		Map<Integer, Integer> vb = new HashMap<>(), vp = new HashMap<>();
-		vp.put(VarPlayerID.MISC_QUEST, 100);
-		vb.put(VarbitID.MISC_APPROVAL, 100);
-		assertEquals(Boolean.TRUE, DailySignals.miscellaniaDue(vars(vb), vars(vp)));
-		vb.put(VarbitID.MISC_APPROVAL, 120);
-		assertEquals(Boolean.FALSE, DailySignals.miscellaniaDue(vars(vb), vars(vp)));
-		assertNull(DailySignals.miscellaniaDue(vars(vb), NONE));
-		// Approval and coffer both 0: not read yet, so not known.
-		vb.put(VarbitID.MISC_APPROVAL, 0);
-		assertNull(DailySignals.miscellaniaDue(vars(vb), vars(vp)));
+		long fiveDays = NOW - 5 * Routines.DAY;
+		assertEquals(Boolean.FALSE, DailySignals.miscellaniaDue(true, 127, NOW, NOW, false));
+		assertEquals(Boolean.TRUE, DailySignals.miscellaniaDue(true, 127, fiveDays, NOW, false));
+		assertEquals(Boolean.FALSE, DailySignals.miscellaniaDue(true, 127, fiveDays, NOW, true));
+		assertEquals(Boolean.TRUE, DailySignals.miscellaniaDue(true, 100, NOW, NOW, false));
+		assertNull(DailySignals.miscellaniaDue(false, 127, NOW, NOW, false)); // not unlocked
+		assertNull(DailySignals.miscellaniaDue(true, null, 0, NOW, false)); // never read
+	}
+
+	@Test
+	public void readingTrustedInTheKingdomOrWhenBothSet()
+	{
+		assertTrue(DailySignals.trusted(true, 0, 0));
+		assertTrue(DailySignals.trusted(false, 120, 50_000));
+		assertFalse(DailySignals.trusted(false, 120, 0)); // outside, coffer 0: ignored
+		assertFalse(DailySignals.trusted(false, 0, 50_000));
 	}
 
 	@Test

@@ -28,13 +28,16 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
+import net.runelite.api.Player;
 import net.runelite.api.Quest;
+import net.runelite.api.QuestState;
 import net.runelite.api.Skill;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.ItemID;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatColorType;
@@ -122,8 +125,12 @@ class GoalTracker
 	/* Miscellania as the game last said (due or not), and as last told to Nib Tracker; null when not known. */
 	private Boolean misc;
 	private Boolean miscSent;
-	/* Tears of Guthix: whether a game was going on at the last change. */
+	/* Tears of Guthix: whether a game was going on at the last change, and whether tears were collected in it. */
 	private int togCollecting;
+	private boolean togSawTears;
+	/* Miscellania's last trusted approval reading and when it was read (epoch ms), per RuneScape profile. */
+	private static final String MISC_APPROVAL_KEY = "miscApproval";
+	private static final String MISC_APPROVAL_AT_KEY = "miscApprovalAt";
 
 	private EventSink sink;
 	private int slayerSeen = -1;
@@ -255,6 +262,7 @@ class GoalTracker
 		misc = null;
 		miscSent = null;
 		togCollecting = 0;
+		togSawTears = false;
 		popup.reset();
 		overlay.set(Collections.emptyList());
 		dirty = true;
@@ -366,6 +374,10 @@ class GoalTracker
 		{
 			lastMinute = minute;
 			dirty = true;
+			if (sink.active())
+			{
+				updateMisc(true); // approval drops a little each day while you're away
+			}
 		}
 		if (!dirty)
 		{
@@ -954,17 +966,22 @@ class GoalTracker
 		});
 	}
 
-	/** Tells Nib Tracker a task is done (chore_done), and counts it done here until Nib Tracker's copy catches up. */
+	/**
+	 * Tells Nib Tracker a task is done, and counts it done here until Nib Tracker's copy catches up. Miscellania has no
+	 * timer, so ticking it off says it's topped up (chore_state, not due) and saves that as a full reading; the next
+	 * real reading from the kingdom replaces it.
+	 */
 	private void markDone(Routines.Daily d)
 	{
 		if (d.condition() && DailySignals.MISCELLANIA.equals(d.key))
 		{
-			misc = false; // topped up; the game's next reading says otherwise if not
+			saveMiscReading(DailySignals.MAX_APPROVAL, System.currentTimeMillis());
+			misc = false;
+			sendMisc(d, false);
+			dirty = true;
+			return;
 		}
-		else
-		{
-			tickedOff.put(d.id, Routines.nextDue(d, System.currentTimeMillis()));
-		}
+		tickedOff.put(d.id, Routines.nextDue(d, System.currentTimeMillis()));
 		JsonObject data = new JsonObject();
 		data.addProperty("id", d.id);
 		if (!d.key.isEmpty())
@@ -1005,31 +1022,87 @@ class GoalTracker
 		{
 			gameDone(d, live);
 		}
-		Boolean m = DailySignals.miscellaniaDue(client::getVarbitValue, client::getVarpValue);
+		readMiscellania();
+		updateMisc(live);
+	}
+
+	/** Saves the approval varbit with the time, when it can be trusted (see DailySignals). */
+	private void readMiscellania()
+	{
+		if (client.getVarpValue(VarPlayerID.MISC_QUEST) <= 0)
+		{
+			return;
+		}
+		int approval = client.getVarbitValue(VarbitID.MISC_APPROVAL), coffer = client.getVarbitValue(VarbitID.MISC_COFFERS);
+		Player me = client.getLocalPlayer();
+		boolean inKingdom = me != null && DailySignals.KINGDOM_REGIONS.contains(me.getWorldLocation().getRegionID());
+		if (!DailySignals.trusted(inKingdom, approval, coffer))
+		{
+			return;
+		}
+		// Out of the kingdom the varbit doesn't move, so only a change is news; in it, the reading is today's.
+		if (inKingdom || !Integer.valueOf(approval).equals(savedApproval()))
+		{
+			saveMiscReading(approval, System.currentTimeMillis());
+		}
+	}
+
+	private Integer savedApproval()
+	{
+		return configManager.getRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_APPROVAL_KEY, Integer.class);
+	}
+
+	private void saveMiscReading(int approval, long at)
+	{
+		configManager.setRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_APPROVAL_KEY, approval);
+		configManager.setRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_APPROVAL_AT_KEY, at);
+	}
+
+	/**
+	 * Client thread, logged in. Works out whether Miscellania is due from the saved reading, shows it straight away, and
+	 * tells Nib Tracker whenever its copy says otherwise. Also run each minute, so it turns due while you're away.
+	 */
+	private void updateMisc(boolean live)
+	{
+		Long at = configManager.getRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_APPROVAL_AT_KEY, Long.class);
+		Boolean m = DailySignals.miscellaniaDue(client.getVarpValue(VarPlayerID.MISC_QUEST) > 0, savedApproval(),
+			at == null ? 0 : at, System.currentTimeMillis(), Quest.ROYAL_TROUBLE.getState(client) == QuestState.FINISHED);
 		if (m != null && !m.equals(misc))
 		{
 			misc = m;
 			dirty = true;
 		}
+		if (misc == null)
+		{
+			return;
+		}
 		for (Routines.Daily d : dailies)
 		{
-			if (DailySignals.MISCELLANIA.equals(d.key) && d.condition() && misc != null)
+			if (DailySignals.MISCELLANIA.equals(d.key) && d.condition())
 			{
 				if (!live)
 				{
-					dailyWasDue.put(d.id, misc);
+					dailyWasDue.putIfAbsent(d.id, misc); // first sight only, so a live top-up's pop-up isn't swallowed
 				}
-				// Tell Nib Tracker when the game and it disagree, once per change.
-				if (!misc.equals(d.due) && !misc.equals(miscSent))
+				if (misc.equals(d.due))
 				{
-					JsonObject data = new JsonObject();
-					data.addProperty("key", d.key);
-					data.addProperty("due", misc);
-					sink.emit("chore_state", data);
+					miscSent = null; // Nib Tracker agrees; a later disagreement is sent again
 				}
-				miscSent = misc;
+				else if (!misc.equals(miscSent))
+				{
+					sendMisc(d, misc);
+				}
 			}
 		}
+	}
+
+	private void sendMisc(Routines.Daily d, boolean due)
+	{
+		JsonObject data = new JsonObject();
+		data.addProperty("key", d.key);
+		data.addProperty("due", due);
+		sink.emit("chore_state", data);
+		miscSent = due;
 	}
 
 	@Subscribe
@@ -1040,15 +1113,21 @@ class GoalTracker
 			return;
 		}
 		int varbit = e.getVarbitId();
-		if (varbit == VarbitID.TOG_MINIGAME_COLLECTING)
+		if (varbit == VarbitID.TOG_TEARS_COLLECTED && e.getValue() > 0 && togCollecting != 0)
+		{
+			togSawTears = true;
+		}
+		else if (varbit == VarbitID.TOG_MINIGAME_COLLECTING)
 		{
 			int before = togCollecting;
 			togCollecting = e.getValue();
-			if (DailySignals.tearsPlayed(before, togCollecting))
+			if (togCollecting == 0)
 			{
+				boolean played = DailySignals.tearsPlayed(before, togCollecting, togSawTears);
+				togSawTears = false;
 				for (Routines.Daily d : dailies)
 				{
-					if (DailySignals.TEARS.equals(d.key))
+					if (played && DailySignals.TEARS.equals(d.key))
 					{
 						gameDone(d, true);
 					}
