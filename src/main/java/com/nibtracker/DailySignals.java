@@ -161,6 +161,26 @@ final class DailySignals
 	}
 
 	/**
+	 * Whether a trusted approval reading should be saved as the new one. Outside the kingdom the varbit keeps its old
+	 * value, so only a change from the raw value last seen is news (a manual top-up isn't undone by the old value). In
+	 * the kingdom the varbit is current: news when it differs from the saved approval, or the saved one is from an
+	 * earlier UTC day. With nothing saved, any reading is news; with nothing seen yet, an outside reading only counts as
+	 * seen.
+	 */
+	static boolean approvalNews(boolean inKingdom, int approval, Integer seen, Integer saved, long savedAtMs, long nowMs)
+	{
+		if (saved == null)
+		{
+			return true;
+		}
+		if (inKingdom)
+		{
+			return approval != saved || savedAtMs / Routines.DAY < nowMs / Routines.DAY;
+		}
+		return seen != null && approval != seen;
+	}
+
+	/**
 	 * Today's approval in percent, estimated from one read at lastChangedMs: it drops 2.5% of the maximum per whole UTC
 	 * day since (1% after Royal Trouble), never below 0.
 	 */

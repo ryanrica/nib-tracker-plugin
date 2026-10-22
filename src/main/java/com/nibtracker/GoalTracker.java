@@ -131,6 +131,10 @@ class GoalTracker
 	/* Miscellania's last trusted approval reading and when it was read (epoch ms), per RuneScape profile. */
 	private static final String MISC_APPROVAL_KEY = "miscApproval";
 	private static final String MISC_APPROVAL_AT_KEY = "miscApprovalAt";
+	/* The raw approval varbit last seen, per RuneScape profile: outside the kingdom only a change from it is news. */
+	private static final String MISC_SEEN_KEY = "miscSeen";
+	/* Whether Royal Trouble is done (approval drops slower), read once per login; null until read. */
+	private Boolean royalTrouble;
 
 	private EventSink sink;
 	private int slayerSeen = -1;
@@ -229,6 +233,7 @@ class GoalTracker
 		questsDirty = true;
 		// Tasks already claimed today count as done, quietly: no pop-up for what was done before logging in.
 		togCollecting = client.getVarbitValue(VarbitID.TOG_MINIGAME_COLLECTING);
+		royalTrouble = Quest.ROYAL_TROUBLE.getState(client) == QuestState.FINISHED;
 		checkDailies(false);
 	}
 
@@ -259,8 +264,10 @@ class GoalTracker
 		wasDone.clear();
 		announced.clear();
 		signalSent.clear();
+		dailyWasDue.clear();
 		misc = null;
 		miscSent = null;
+		royalTrouble = null;
 		togCollecting = 0;
 		togSawTears = false;
 		popup.reset();
@@ -286,9 +293,11 @@ class GoalTracker
 				goals = GoalProgress.parse(g);
 				questsDirty = true;
 			}
+			List<Routines.Daily> before = dailies;
 			dailies = Routines.dailies(settings.get("dailies"));
 			if (sink.active())
 			{
+				webTopUp(before);
 				checkDailies(false); // tasks claimed before the feed came count now, quietly
 			}
 			feedFarm = Routines.farm(settings.get("farm"));
@@ -968,17 +977,16 @@ class GoalTracker
 
 	/**
 	 * Tells Nib Tracker a task is done, and counts it done here until Nib Tracker's copy catches up. Miscellania has no
-	 * timer, so ticking it off says it's topped up (chore_state, not due) and saves that as a full reading; the next
-	 * real reading from the kingdom replaces it.
+	 * timer, so ticking it off saves full approval as today's reading, remembers the varbit as it is now (so its old
+	 * value isn't taken as news), and tells Nib Tracker it's topped up (chore_state, not due). A reading in the kingdom,
+	 * or the varbit changing, replaces it.
 	 */
 	private void markDone(Routines.Daily d)
 	{
 		if (d.condition() && DailySignals.MISCELLANIA.equals(d.key))
 		{
-			saveMiscReading(DailySignals.MAX_APPROVAL, System.currentTimeMillis());
-			misc = false;
+			topUp();
 			sendMisc(d, false);
-			dirty = true;
 			return;
 		}
 		tickedOff.put(d.id, Routines.nextDue(d, System.currentTimeMillis()));
@@ -1040,10 +1048,47 @@ class GoalTracker
 		{
 			return;
 		}
-		// Out of the kingdom the varbit doesn't move, so only a change is news; in it, the reading is today's.
-		if (inKingdom || !Integer.valueOf(approval).equals(savedApproval()))
+		long now = System.currentTimeMillis();
+		if (DailySignals.approvalNews(inKingdom, approval, seenApproval(), savedApproval(), savedApprovalAt(), now))
 		{
-			saveMiscReading(approval, System.currentTimeMillis());
+			saveMiscReading(approval, now);
+		}
+		saveSeen(approval);
+	}
+
+	/** Full approval as of now: ticked off here or in Nib Tracker. The varbit as it is now stays old news. */
+	private void topUp()
+	{
+		saveMiscReading(DailySignals.MAX_APPROVAL, System.currentTimeMillis());
+		saveSeen(client.getVarbitValue(VarbitID.MISC_APPROVAL));
+		misc = false;
+		miscSent = null;
+		dirty = true;
+	}
+
+	/**
+	 * Client thread, logged in. Miscellania ticked off in Nib Tracker (due in the old feed, not in the new) while the game
+	 * still says due: taken as a top-up, as if ticked here, so it isn't sent back as due.
+	 */
+	private void webTopUp(List<Routines.Daily> before)
+	{
+		if (!Boolean.TRUE.equals(misc))
+		{
+			return;
+		}
+		for (Routines.Daily d : dailies)
+		{
+			if (d.condition() && DailySignals.MISCELLANIA.equals(d.key) && Boolean.FALSE.equals(d.due))
+			{
+				for (Routines.Daily b : before)
+				{
+					if (b.condition() && DailySignals.MISCELLANIA.equals(b.key) && Boolean.TRUE.equals(b.due))
+					{
+						topUp();
+						return;
+					}
+				}
+			}
 		}
 	}
 
@@ -1052,10 +1097,36 @@ class GoalTracker
 		return configManager.getRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_APPROVAL_KEY, Integer.class);
 	}
 
+	private long savedApprovalAt()
+	{
+		Long at = configManager.getRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_APPROVAL_AT_KEY, Long.class);
+		return at == null ? 0 : at;
+	}
+
+	private Integer seenApproval()
+	{
+		return configManager.getRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_SEEN_KEY, Integer.class);
+	}
+
+	/* Each write fires a settings change (and a panel refresh), so only what changed is written. */
 	private void saveMiscReading(int approval, long at)
 	{
-		configManager.setRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_APPROVAL_KEY, approval);
-		configManager.setRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_APPROVAL_AT_KEY, at);
+		if (!Integer.valueOf(approval).equals(savedApproval()))
+		{
+			configManager.setRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_APPROVAL_KEY, approval);
+		}
+		if (at != savedApprovalAt())
+		{
+			configManager.setRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_APPROVAL_AT_KEY, at);
+		}
+	}
+
+	private void saveSeen(int approval)
+	{
+		if (!Integer.valueOf(approval).equals(seenApproval()))
+		{
+			configManager.setRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_SEEN_KEY, approval);
+		}
 	}
 
 	/**
@@ -1064,9 +1135,12 @@ class GoalTracker
 	 */
 	private void updateMisc(boolean live)
 	{
-		Long at = configManager.getRSProfileConfiguration(NibTrackerConfig.GROUP, MISC_APPROVAL_AT_KEY, Long.class);
+		if (royalTrouble == null)
+		{
+			royalTrouble = Quest.ROYAL_TROUBLE.getState(client) == QuestState.FINISHED;
+		}
 		Boolean m = DailySignals.miscellaniaDue(client.getVarpValue(VarPlayerID.MISC_QUEST) > 0, savedApproval(),
-			at == null ? 0 : at, System.currentTimeMillis(), Quest.ROYAL_TROUBLE.getState(client) == QuestState.FINISHED);
+			savedApprovalAt(), System.currentTimeMillis(), royalTrouble);
 		if (m != null && !m.equals(misc))
 		{
 			misc = m;

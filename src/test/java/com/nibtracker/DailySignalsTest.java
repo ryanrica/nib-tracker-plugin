@@ -123,6 +123,25 @@ public class DailySignalsTest
 	}
 
 	@Test
+	public void approvalNewsOnlyWhenTheVarbitMoves()
+	{
+		long yesterday = NOW - Routines.DAY;
+		// Ticked by hand (saved 127) with the varbit still at its old 100: the same 100 again is not news.
+		assertFalse(DailySignals.approvalNews(false, 100, 100, 127, NOW, NOW));
+		assertFalse(DailySignals.approvalNews(false, 100, 100, 127, yesterday, NOW));
+		// Outside, the raw value moved: news.
+		assertTrue(DailySignals.approvalNews(false, 110, 100, 127, NOW, NOW));
+		// Nothing seen yet (first run): only remembered as seen.
+		assertFalse(DailySignals.approvalNews(false, 100, null, 127, NOW, NOW));
+		// Nothing saved: any trusted reading counts.
+		assertTrue(DailySignals.approvalNews(false, 100, null, null, 0, NOW));
+		// In the kingdom: a different value, or the same one saved on an earlier day, is today's reading.
+		assertTrue(DailySignals.approvalNews(true, 100, 100, 127, NOW, NOW));
+		assertFalse(DailySignals.approvalNews(true, 127, 100, 127, NOW, NOW));
+		assertTrue(DailySignals.approvalNews(true, 127, 127, 127, yesterday, NOW));
+	}
+
+	@Test
 	public void loginWithClaimedFlagIsQuietAndOnce()
 	{
 		List<Routines.Daily> dailies = Arrays.asList(daily("z", "zaff_staves"), daily("b", "bert_sand"));

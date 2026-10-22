@@ -47,4 +47,27 @@ public class FarmMergeTest
 		assertEquals("Catherby||herb", both.get(0).id());
 		assertEquals("unknown", both.get(1).state);
 	}
+
+	@Test
+	public void staleFeedOnlyRowsDropped()
+	{
+		Map<String, String> e = new HashMap<>();
+		e.put("11062.4774", "32:" + T);
+		List<Routines.Patch> local = PatchPredictor.load(new Gson()).predict(e, T * 1000);
+		// The bird house was emptied, so there's no row for it here; the feed still says it's ready.
+		List<Routines.Patch> feed = Routines.farm(new JsonParser().parse(
+			"[{\"region\":\"Fossil Island\",\"name\":\"Verdant Valley\",\"crop\":\"Bird house\",\"state\":\"ready\",\"kind\":\"birdhouse\"},"
+				+ "{\"region\":\"Farming Guild\",\"name\":\"Hespori\",\"crop\":\"\",\"state\":\"unknown\",\"kind\":\"hespori\"}]"));
+
+		List<Routines.Patch> merged = FarmRows.merge(local, feed);
+		assertEquals(2, merged.size());
+		assertEquals("Catherby||herb", merged.get(0).id());
+		assertEquals("Hespori", merged.get(1).name);
+		assertEquals("unknown", merged.get(1).state);
+
+		// With nothing worked out here (no Time Tracking data), the feed's rows show as they are.
+		List<Routines.Patch> none = FarmRows.merge(Collections.emptyList(), feed);
+		assertEquals(2, none.size());
+		assertEquals("ready", none.get(0).state);
+	}
 }

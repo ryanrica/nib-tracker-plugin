@@ -250,8 +250,10 @@ final class FarmRows
 
 	/**
 	 * The patches worked out here, each with the way there and its stop in the run from the feed row with the same id,
-	 * then the feed's rows with no patch here (special patches it lists as unknown), as they are. With no feed, or one
-	 * that's older, the rows still show, without travel tips.
+	 * then the feed's rows with no patch here, as they are. When there are patches here, only the feed's unknown rows
+	 * (special patches it lists with no data) are added: any other feed-only row is out of date, like an emptied bird
+	 * house that no longer has a row here. With no patches here (no Time Tracking data) every feed row shows. With no
+	 * feed, or one that's older, the rows still show, without travel tips.
 	 */
 	static List<Routines.Patch> merge(List<Routines.Patch> local, List<Routines.Patch> feed)
 	{
@@ -279,7 +281,7 @@ final class FarmRows
 		}
 		for (Routines.Patch f : feed)
 		{
-			if (!mine.contains(f.id()))
+			if (!mine.contains(f.id()) && (local.isEmpty() || "unknown".equals(f.state)))
 			{
 				out.add(f);
 			}
