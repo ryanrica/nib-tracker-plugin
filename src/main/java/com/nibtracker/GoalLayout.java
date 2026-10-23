@@ -1,11 +1,13 @@
 package com.nibtracker;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * How the Goals panel arranges goals: each main goal with its parts folded under it (Base 80 with its skills, a quest
@@ -130,5 +132,60 @@ final class GoalLayout
 		}
 		out.sections.values().removeIf(List::isEmpty);
 		return out;
+	}
+
+	/** What Overview shows of some goals: whole groups, and goals on their own. */
+	static final class Picks
+	{
+		final List<Group> groups = new ArrayList<>();
+		final List<GoalsPanel.Row> rows = new ArrayList<>();
+
+		int size()
+		{
+			return groups.size() + rows.size();
+		}
+
+		boolean isEmpty()
+		{
+			return size() == 0;
+		}
+	}
+
+	/**
+	 * The favourites among some groups, each checked against its own tab's favourites (favs by category, as the ★
+	 * saves them). A favourite main goal brings its group with its parts; otherwise each favourite part or extra comes
+	 * on its own.
+	 */
+	static Picks favourites(List<Group> groups, Map<String, Set<String>> favs)
+	{
+		Picks out = new Picks();
+		for (Group g : groups)
+		{
+			if (favourite(g.main, favs))
+			{
+				out.groups.add(g);
+				continue;
+			}
+			for (GoalsPanel.Row r : g.extras)
+			{
+				if (favourite(r, favs))
+				{
+					out.rows.add(r);
+				}
+			}
+			for (GoalsPanel.Row r : g.parts)
+			{
+				if (favourite(r, favs))
+				{
+					out.rows.add(r);
+				}
+			}
+		}
+		return out;
+	}
+
+	private static boolean favourite(GoalsPanel.Row r, Map<String, Set<String>> favs)
+	{
+		return favs.getOrDefault(r.category, Collections.emptySet()).contains(r.id);
 	}
 }

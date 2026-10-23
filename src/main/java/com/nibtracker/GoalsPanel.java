@@ -150,8 +150,6 @@ class GoalsPanel extends PluginPanel
 		Runnable click;
 	}
 
-	/* Each section shows this many goals until "Show more" is clicked. */
-	private static final int SECTION_LIMIT = 6;
 	private static final String COMPLETED = "Completed";
 	private static final String DAILIES = "Daily tasks";
 	private static final String FARMING = "Farming";
@@ -190,9 +188,8 @@ class GoalsPanel extends PluginPanel
 	private final ItemManager itemManager;
 	private final SkillIconManager skillIcons;
 	private final Map<String, Icon> icons = new HashMap<>();
-	/* Sections folded away (Completed starts folded), sections showing all their goals, and main goals showing their parts. */
+	/* Sections folded away (Completed starts folded), and main goals showing their parts. */
 	private final Set<String> collapsed = new HashSet<>(Collections.singleton(COMPLETED));
-	private final Set<String> showAll = new HashSet<>();
 	private final Set<String> expanded = new HashSet<>();
 	/* Called with a goal's id when it's put on or taken off the game screen. */
 	private Consumer<String> onPin = id -> { };
@@ -309,16 +306,20 @@ class GoalsPanel extends PluginPanel
 		list.removeAll();
 		if (OVERVIEW.equals(view))
 		{
+			// Only what's been favourited in each tab, under the same headings; a heading with none doesn't show.
 			filters.setVisible(false);
+			boolean any = false;
 			for (Map.Entry<String, List<GoalLayout.Group>> s : layout.sections.entrySet())
 			{
-				section(s.getKey(), s.getValue());
+				any |= picksSection(s.getKey(), GoalLayout.favourites(s.getValue(), extras.favourites));
 			}
-			dailies(extras, true);
-			farmingOverview(extras);
-			if (!layout.completed.isEmpty())
+			any |= dailies(extras, true);
+			any |= farmingOverview(extras);
+			any |= picksSection(COMPLETED, GoalLayout.favourites(layout.completed, extras.favourites));
+			// The hint shows once there are tabs to star things in.
+			if (!any && views.size() > 1)
 			{
-				section(COMPLETED, layout.completed);
+				list.add(note("Star things in any tab to see them here."));
 			}
 		}
 		else if (DAILIES.equals(view))
@@ -718,39 +719,44 @@ class GoalsPanel extends PluginPanel
 		}
 	}
 
-	/** Daily tasks: due ones first, each with its status; right-click to tick one off or put them on screen. */
-	private void dailies(Extras x, boolean overview)
+	/**
+	 * Daily tasks: due ones first, each with its status; right-click to tick one off or put them on screen. In Overview,
+	 * only the favourite ones, and nothing when there are none. True when anything was shown.
+	 */
+	private boolean dailies(Extras x, boolean overview)
 	{
 		if (!x.dailiesOn || x.dailies.isEmpty())
 		{
-			return;
+			return false;
 		}
 		String f = overview ? ALL : currentFilter();
+		List<DailyView> shown = x.dailies;
 		if (overview)
 		{
-			JComponent header = sectionHeader(DAILIES, DAILIES, (int) x.dailies.stream().filter(d -> d.due).count(), headingIcon(ItemID.BATTLESTAFF));
+			shown = Favourites.only(x.dailies, d -> d.id, favourites(DAILIES));
+			if (shown.isEmpty())
+			{
+				return false;
+			}
+			JComponent header = sectionHeader(DAILIES, DAILIES, (int) shown.stream().filter(d -> d.due).count(), headingIcon(ItemID.BATTLESTAFF));
 			header.setComponentPopupMenu(dailiesMenu(x, null));
 			inheritMenu(header);
 			list.add(header);
 			if (collapsed.contains(DAILIES))
 			{
-				return;
+				return true;
 			}
 		}
 		else
 		{
-			Set<String> favs = favourites(DAILIES);
 			List<Card> cards = new ArrayList<>();
-			for (DailyView d : x.dailies)
+			for (DailyView d : Favourites.only(x.dailies, v -> v.id, favourites(DAILIES)))
 			{
-				if (favs.contains(d.id))
-				{
-					cards.add(dailyCard(x, d, false));
-				}
+				cards.add(dailyCard(x, d, false));
 			}
 			favouritesSection(DAILIES, cards);
 		}
-		for (DailyView d : x.dailies)
+		for (DailyView d : shown)
 		{
 			if ("Due".equals(f) && !d.due || "Done".equals(f) && d.due)
 			{
@@ -758,6 +764,7 @@ class GoalsPanel extends PluginPanel
 			}
 			list.add(card(dailyCard(x, d, overview), 0));
 		}
+		return true;
 	}
 
 	/** A daily task as a row: its item's icon, its status, how to do it (on its own tab), ★ and ▣ for just this task. */
@@ -819,20 +826,60 @@ class GoalsPanel extends PluginPanel
 		return x.allRegions.isEmpty() && x.contract != null ? CONTRACT : ALL_PATCHES;
 	}
 
-	/** Overview's Farming section: the shown regions, soonest first, each folding open to its patches. */
-	private void farmingOverview(Extras x)
+	/** Overview's Farming section: the tab's favourite patches and the contract, ready first. False (and nothing) when none. */
+	private boolean farmingOverview(Extras x)
 	{
-		if (!x.farmOn || x.allRegions.isEmpty())
+		if (!x.farmOn)
 		{
-			return;
+			return false;
 		}
-		JComponent header = sectionHeader(FARMING, x.regions.size());
+		Map<String, PatchView> byId = patchesById(x);
+		List<String> shown = farmFavouriteIds(x, byId);
+		if (shown.isEmpty())
+		{
+			return false;
+		}
+		JComponent header = sectionHeader(FARMING, shown.size());
 		header.setComponentPopupMenu(farmMenu(x));
 		inheritMenu(header);
 		list.add(header);
 		if (!collapsed.contains(FARMING))
 		{
-			regionRows(x);
+			farmFavouriteRows(x, byId, shown);
+		}
+		return true;
+	}
+
+	private static Map<String, PatchView> patchesById(Extras x)
+	{
+		Map<String, PatchView> byId = new HashMap<>();
+		for (PatchView p : x.patches)
+		{
+			byId.putIfAbsent(p.id, p);
+		}
+		return byId;
+	}
+
+	/** The Farming tab's favourites that are there now (a patch with a timer, or the contract), in the order saved. */
+	private List<String> farmFavouriteIds(Extras x, Map<String, PatchView> byId)
+	{
+		List<String> shown = new ArrayList<>();
+		for (String id : favourites(FARMING))
+		{
+			if (FarmGroups.CONTRACT_ID.equals(id) ? x.contract != null : byId.containsKey(id))
+			{
+				shown.add(id);
+			}
+		}
+		return shown;
+	}
+
+	/** Those favourites as rows, ready first. */
+	private void farmFavouriteRows(Extras x, Map<String, PatchView> byId, List<String> shown)
+	{
+		for (String id : FarmRows.readyFirst(shown, id -> FarmGroups.CONTRACT_ID.equals(id) ? x.contract.ready : byId.get(id).ready))
+		{
+			list.add(card(FarmGroups.CONTRACT_ID.equals(id) ? contractCard(x) : patchCard(x, byId.get(id)), 0));
 		}
 	}
 
@@ -970,19 +1017,8 @@ class GoalsPanel extends PluginPanel
 	{
 		String key = "fav:" + FARMING;
 		Set<String> favs = favourites(FARMING);
-		Map<String, PatchView> byId = new HashMap<>();
-		for (PatchView p : x.patches)
-		{
-			byId.putIfAbsent(p.id, p);
-		}
-		List<String> shown = new ArrayList<>();
-		for (String id : favs)
-		{
-			if (FarmGroups.CONTRACT_ID.equals(id) ? x.contract != null : byId.containsKey(id))
-			{
-				shown.add(id);
-			}
-		}
+		Map<String, PatchView> byId = patchesById(x);
+		List<String> shown = farmFavouriteIds(x, byId);
 		boolean picker = FAVOURITES.equals(picking);
 		String pin = Favourites.groupPin(FARMING);
 		list.add(sectionHeader(key, FAVOURITES, shown.size(), new Glyph(true, true),
@@ -1019,10 +1055,7 @@ class GoalsPanel extends PluginPanel
 			list.add(note("No favourites yet. Use the star, or edit."));
 			return;
 		}
-		for (String id : FarmRows.readyFirst(shown, id -> FarmGroups.CONTRACT_ID.equals(id) ? x.contract.ready : byId.get(id).ready))
-		{
-			list.add(card(FarmGroups.CONTRACT_ID.equals(id) ? contractCard(x) : patchCard(x, byId.get(id)), 0));
-		}
+		farmFavouriteRows(x, byId, shown);
 	}
 
 	/** Special or All trees, under a heading per kind, ready first: hidden regions too (hiding is for All patches only). */
@@ -1378,29 +1411,19 @@ class GoalsPanel extends PluginPanel
 		return c;
 	}
 
-	/** A section: its heading, then its goals (the first few until "Show more"). */
-	private void section(String name, List<GoalLayout.Group> groups)
+	private boolean picksSection(String name, GoalLayout.Picks picks)
 	{
-		list.add(sectionHeader(name, groups.size()));
-		if (collapsed.contains(name))
+		if (picks.isEmpty())
 		{
-			return;
+			return false;
 		}
-		int shown = showAll.contains(name) ? groups.size() : Math.min(groups.size(), SECTION_LIMIT);
-		for (int i = 0; i < shown; i++)
+		list.add(sectionHeader(name, picks.size()));
+		if (!collapsed.contains(name))
 		{
-			group(groups.get(i));
+			picks.groups.forEach(this::group);
+			picks.rows.forEach(r -> list.add(card(goalCard(r, r.progress, r.detail), 0)));
 		}
-		if (groups.size() > SECTION_LIMIT)
-		{
-			boolean all = showAll.contains(name);
-			list.add(toggle(all ? "– Show fewer" : "+ Show " + (groups.size() - SECTION_LIMIT) + " more", 0, () -> {
-				if (!showAll.remove(name))
-				{
-					showAll.add(name);
-				}
-			}));
-		}
+		return true;
 	}
 
 	/** A main goal, and its parts folded under it (Base 80 and its skills). */
@@ -1440,7 +1463,7 @@ class GoalsPanel extends PluginPanel
 		return goalCard(g.main, g.progress(), detail);
 	}
 
-	/** A small clickable line ("+ 23 parts", "Show 4 more") that changes what's shown. */
+	/** A small clickable line ("+ Show parts") that changes what's shown. */
 	private JComponent toggle(String text, int indent, Runnable flip)
 	{
 		JLabel l = new JLabel(text);

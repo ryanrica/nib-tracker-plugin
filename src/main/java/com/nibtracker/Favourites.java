@@ -1,10 +1,13 @@
 package com.nibtracker;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /** Per-tab favourites and the pin ids. Pure, so it can be tested. */
 final class Favourites
@@ -108,5 +111,19 @@ final class Favourites
 	static boolean isLegacyKindPin(String pin)
 	{
 		return pin.startsWith("farming:") && !pin.startsWith("farming:kind:") && !pin.equals(FarmGroups.CONTRACT_ID);
+	}
+
+	/** The rows whose id is a favourite, in the rows' order (what Overview keeps of a tab). */
+	static <T> List<T> only(List<T> rows, Function<T, String> id, Set<String> favs)
+	{
+		List<T> out = new ArrayList<>();
+		for (T r : rows)
+		{
+			if (favs.contains(id.apply(r)))
+			{
+				out.add(r);
+			}
+		}
+		return out;
 	}
 }

@@ -84,4 +84,13 @@ public class FavouritesTest
 		assertEquals("farm:region:Farming Guild", Favourites.regionPin("Farming Guild"));
 		assertFalse(Favourites.isLegacyKindPin(Favourites.regionPin("Farming Guild")));
 	}
+
+	@Test
+	public void onlyKeepsFavouritesInOrder()
+	{
+		Set<String> favs = new HashSet<>(Arrays.asList("b", "d"));
+		assertEquals(Arrays.asList("b", "d"), Favourites.only(Arrays.asList("a", "b", "c", "d"), s -> s, favs));
+		assertTrue(Favourites.only(Arrays.asList("a", "c"), s -> s, favs).isEmpty());
+		assertTrue(Favourites.only(Arrays.asList("a"), s -> s, Collections.emptySet()).isEmpty());
+	}
 }

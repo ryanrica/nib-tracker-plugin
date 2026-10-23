@@ -3,7 +3,12 @@ package com.nibtracker;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.junit.Test;
 
 public class GoalLayoutTest
@@ -73,5 +78,38 @@ public class GoalLayoutTest
 		assertEquals(GoalTracker.SLAYER_TASK, g.extras.get(0).id);
 		assertTrue(g.parts.isEmpty());
 		assertEquals(0, g.partsTotal());
+	}
+
+	@Test
+	public void overviewKeepsOnlyFavourites()
+	{
+		GoalsPanel.Row base = row("base", "Skills", 0.6, false, "");
+		List<GoalsPanel.Row> rows = Arrays.asList(base, row("smith", "Skills", 0.5, false, "base"),
+			row("fish", "Skills", 0.9, false, "base"), row("att", "Skills", 0.3, false, ""), row("hp", "Skills", 0.1, false, ""),
+			row("done1", "Quests", 1, true, ""), row("done2", "Quests", 1, true, ""));
+		GoalLayout.Layout l = GoalLayout.of(rows);
+		Map<String, Set<String>> favs = new HashMap<>();
+		favs.put("Skills", new HashSet<>(Arrays.asList("fish", "hp")));
+		favs.put("Quests", new HashSet<>(Collections.singletonList("done2")));
+
+		// A favourite part comes on its own; a group whose main goal isn't a favourite doesn't.
+		GoalLayout.Picks skills = GoalLayout.favourites(l.sections.get("Skills"), favs);
+		assertTrue(skills.groups.stream().anyMatch(g -> "hp".equals(g.main.id)));
+		assertEquals(1, skills.groups.size());
+		assertEquals(Collections.singletonList("fish"), Arrays.asList(skills.rows.get(0).id));
+		assertEquals(2, skills.size());
+
+		// A favourite main goal brings its group (and its parts with it, not again on their own).
+		favs.put("Skills", new HashSet<>(Arrays.asList("base", "fish")));
+		GoalLayout.Picks whole = GoalLayout.favourites(l.sections.get("Skills"), favs);
+		assertEquals("base", whole.groups.get(0).main.id);
+		assertTrue(whole.rows.isEmpty());
+
+		// Completed: only the favourited ones.
+		GoalLayout.Picks done = GoalLayout.favourites(l.completed, favs);
+		assertEquals(1, done.groups.size());
+		assertEquals("done2", done.groups.get(0).main.id);
+
+		assertTrue(GoalLayout.favourites(l.completed, Collections.emptyMap()).isEmpty());
 	}
 }
