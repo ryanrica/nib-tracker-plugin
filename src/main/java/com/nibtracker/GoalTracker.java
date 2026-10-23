@@ -223,7 +223,13 @@ class GoalTracker
 				out.add(s.trim());
 			}
 		}
-		return out;
+		// Old tree-kind pins become one All trees pin, saved so it sticks (their chips are gone).
+		Set<String> migrated = Favourites.migrateTreePins(out);
+		if (!migrated.equals(out))
+		{
+			configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.PINNED_GOALS, String.join(",", migrated));
+		}
+		return migrated;
 	}
 
 	/** Logged in and stats loaded. */

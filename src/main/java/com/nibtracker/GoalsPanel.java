@@ -915,7 +915,7 @@ class GoalsPanel extends PluginPanel
 		}
 	}
 
-	/** Spirit trees: each spot and whether a tree is planted there; a green bar when grown, amber when diseased or dead. */
+	/** Spirit trees: each spot and whether a tree is planted there; a green bar when grown, amber when diseased or dead, grey while growing. */
 	private void spiritTrees(Extras x)
 	{
 		String key = "farm:" + SPIRIT_TREES;
@@ -939,6 +939,11 @@ class GoalsPanel extends PluginPanel
 				c.progress = 1;
 				c.barDone = grown;
 				c.barColour = attention ? AMBER : null;
+			}
+			else if ("Growing".equals(t.state) && t.progress >= 0)
+			{
+				c.progress = t.progress;
+				c.barColour = MUTED;
 			}
 			list.add(card(c, 0));
 		}

@@ -1,5 +1,6 @@
 package com.nibtracker;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -92,5 +93,21 @@ public class FavouritesTest
 		assertEquals(Arrays.asList("b", "d"), Favourites.only(Arrays.asList("a", "b", "c", "d"), s -> s, favs));
 		assertTrue(Favourites.only(Arrays.asList("a", "c"), s -> s, favs).isEmpty());
 		assertTrue(Favourites.only(Arrays.asList("a"), s -> s, Collections.emptySet()).isEmpty());
+	}
+
+	@Test
+	public void oldTreeKindPinsBecomeAllTrees()
+	{
+		Set<String> pins = new LinkedHashSet<>(Arrays.asList("g1", "farming:Trees", "farming:kind:herb", "farming:kind:hardwood",
+			"farming:Redwood", "farming:Herbs", "farming:kind:redwood", "farming:Hardwood", "farming:kind:tree", "farming:special"));
+		Set<String> out = Favourites.migrateTreePins(pins);
+		assertEquals(new LinkedHashSet<>(Arrays.asList("g1", Favourites.TREES_PIN, "farming:kind:herb", "farming:Herbs", "farming:special")), out);
+		assertEquals(Arrays.asList("g1", Favourites.TREES_PIN, "farming:kind:herb", "farming:Herbs", "farming:special"), new ArrayList<>(out));
+		// Again changes nothing; an All trees pin already there isn't doubled.
+		assertEquals(out, Favourites.migrateTreePins(out));
+		Set<String> both = Favourites.migrateTreePins(new LinkedHashSet<>(Arrays.asList(Favourites.TREES_PIN, "farming:kind:tree")));
+		assertEquals(Collections.singleton(Favourites.TREES_PIN), both);
+		Set<String> none = new LinkedHashSet<>(Arrays.asList("dailies", "farming:contract", "farm:patch:x"));
+		assertEquals(none, Favourites.migrateTreePins(none));
 	}
 }

@@ -1,7 +1,9 @@
 package com.nibtracker;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -123,6 +125,27 @@ final class Favourites
 			{
 				out.add(r);
 			}
+		}
+		return out;
+	}
+
+	/* The old kind-chip labels of the tree kinds, as "farming:<label>" pins used them. */
+	private static final Set<String> TREE_LABELS = new HashSet<>(Arrays.asList("Trees", "Hardwood", "Redwood"));
+
+	/**
+	 * The pins with every old tree-kind pin ("farming:Trees", "farming:kind:hardwood"...) replaced by one All trees pin,
+	 * where the first of them was. Those kinds have no chip of their own now, so their pins couldn't be taken off.
+	 */
+	static Set<String> migrateTreePins(Set<String> pins)
+	{
+		Set<String> out = new LinkedHashSet<>();
+		String kindPrefix = kindPin("");
+		for (String pin : pins)
+		{
+			boolean tree = pin.startsWith(kindPrefix) ? FarmGroups.tree(pin.substring(kindPrefix.length()))
+				: !pin.equals(SPECIAL_PIN) && !pin.equals(TREES_PIN) && isLegacyKindPin(pin)
+					&& TREE_LABELS.contains(pin.substring("farming:".length()));
+			out.add(tree ? TREES_PIN : pin);
 		}
 		return out;
 	}

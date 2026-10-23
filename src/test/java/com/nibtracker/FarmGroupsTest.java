@@ -188,7 +188,7 @@ public class FarmGroupsTest
 	{
 		List<GoalsPanel.PatchView> ps = Arrays.asList(view("herb", "Herbs"), view("tree", "Trees"), view("hardwood", "Hardwood"),
 			view("redwood", "Redwood"), view("fruit_tree", "Fruit trees"), view("herb", "Herbs"), view("hespori", "Hespori"),
-			view("x", ""));
+			view("x", ""), view("spirit_tree", "Spirit trees"));
 		assertEquals(Arrays.asList("Fruit trees", "Herbs", "Hespori"), GoalsPanel.kindChips(ps));
 	}
 }
