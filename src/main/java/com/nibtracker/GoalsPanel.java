@@ -563,36 +563,7 @@ class GoalsPanel extends PluginPanel
 		}
 		filters(tags);
 		String f = currentFilter();
-		// This tab's favourites first, whatever the sub-filter: each favourited goal, main goal or part, on its own.
-		Set<String> favs = favourites(category);
-		if (!favs.isEmpty())
-		{
-			List<Card> cards = new ArrayList<>();
-			List<GoalLayout.Group> all = new ArrayList<>(open);
-			all.addAll(finished);
-			for (GoalLayout.Group g : all)
-			{
-				if (favs.contains(g.main.id))
-				{
-					cards.add(mainCard(g));
-				}
-				for (Row x : g.extras)
-				{
-					if (favs.contains(x.id))
-					{
-						cards.add(goalCard(x, x.progress, x.detail));
-					}
-				}
-				for (Row x : g.parts)
-				{
-					if (favs.contains(x.id))
-					{
-						cards.add(goalCard(x, x.progress, x.detail));
-					}
-				}
-			}
-			favouritesSection(category, cards);
-		}
+		// Favourites stay where they are here (★ on the row); Overview is where they're gathered.
 		for (GoalLayout.Group g : open)
 		{
 			if (ALL.equals(f) || f.equals(g.main.tag))
@@ -738,7 +709,9 @@ class GoalsPanel extends PluginPanel
 			{
 				return false;
 			}
-			JComponent header = sectionHeader(DAILIES, DAILIES, (int) shown.stream().filter(d -> d.due).count(), headingIcon(ItemID.BATTLESTAFF));
+			String pin = Favourites.groupPin(DAILIES);
+			JComponent header = sectionHeader(DAILIES, DAILIES, (int) shown.stream().filter(d -> d.due).count(),
+				headingIcon(ItemID.BATTLESTAFF), null, pin, x.pins.contains(pin));
 			header.setComponentPopupMenu(dailiesMenu(x, null));
 			inheritMenu(header);
 			list.add(header);
@@ -746,15 +719,6 @@ class GoalsPanel extends PluginPanel
 			{
 				return true;
 			}
-		}
-		else
-		{
-			List<Card> cards = new ArrayList<>();
-			for (DailyView d : Favourites.only(x.dailies, v -> v.id, favourites(DAILIES)))
-			{
-				cards.add(dailyCard(x, d, false));
-			}
-			favouritesSection(DAILIES, cards);
 		}
 		for (DailyView d : shown)
 		{
@@ -785,23 +749,6 @@ class GoalsPanel extends PluginPanel
 		c.tooltip = d.how.isEmpty() ? null : "<html>" + escape(d.label) + "<br>" + escape(d.how) + "</html>";
 		c.menu = dailiesMenu(x, d);
 		return c;
-	}
-
-	/** This tab's favourites, as a ★ FAVOURITES section at the top of the tab (nothing when it has none). */
-	private void favouritesSection(String tab, List<Card> cards)
-	{
-		if (cards.isEmpty())
-		{
-			return;
-		}
-		String key = "fav:" + tab;
-		// ▣ on the header puts the whole list on the game screen.
-		String pin = Favourites.groupPin(tab);
-		list.add(sectionHeader(key, FAVOURITES, cards.size(), new Glyph(true, true), null, pin, lastExtras.pins.contains(pin)));
-		if (!collapsed.contains(key))
-		{
-			cards.forEach(c -> list.add(card(c, 0)));
-		}
 	}
 
 	private Set<String> favourites(String tab)
@@ -839,7 +786,8 @@ class GoalsPanel extends PluginPanel
 		{
 			return false;
 		}
-		JComponent header = sectionHeader(FARMING, shown.size());
+		String pin = Favourites.groupPin(FARMING);
+		JComponent header = sectionHeader(FARMING, FARMING, shown.size(), null, null, pin, x.pins.contains(pin));
 		header.setComponentPopupMenu(farmMenu(x));
 		inheritMenu(header);
 		list.add(header);
@@ -1422,7 +1370,9 @@ class GoalsPanel extends PluginPanel
 		{
 			return false;
 		}
-		list.add(sectionHeader(name, picks.size()));
+		// ▣ puts that tab's favourites on the game screen (not for Completed).
+		String pin = COMPLETED.equals(name) ? null : Favourites.groupPin(name);
+		list.add(sectionHeader(name, name, picks.size(), null, null, pin, pin != null && lastExtras.pins.contains(pin)));
 		if (!collapsed.contains(name))
 		{
 			picks.groups.forEach(this::group);
