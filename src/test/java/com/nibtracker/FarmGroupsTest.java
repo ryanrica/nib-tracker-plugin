@@ -184,6 +184,16 @@ public class FarmGroupsTest
 	}
 
 	@Test
+	public void favouritesGroupByKindLabelInNameOrder()
+	{
+		GoalsPanel.PatchView herb1 = view("herb", "Herbs"), bush = view("bush", "Bushes"), herb2 = view("herb", "Herbs"),
+			noLabel = view("hespori", "");
+		java.util.Map<String, List<GoalsPanel.PatchView>> g = GoalsPanel.byKind(Arrays.asList(herb1, bush, herb2, noLabel));
+		assertEquals(Arrays.asList("Bushes", "Herbs", "hespori"), new java.util.ArrayList<>(g.keySet()));
+		assertEquals(Arrays.asList(herb1, herb2), g.get("Herbs"));
+	}
+
+	@Test
 	public void kindChipsLeaveOutTreesAndGroups()
 	{
 		List<GoalsPanel.PatchView> ps = Arrays.asList(view("herb", "Herbs"), view("tree", "Trees"), view("hardwood", "Hardwood"),

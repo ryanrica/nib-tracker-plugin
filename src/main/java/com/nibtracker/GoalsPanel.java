@@ -822,13 +822,47 @@ class GoalsPanel extends PluginPanel
 		return shown;
 	}
 
-	/** Those favourites as rows, ready first. */
+	/** Those favourites as rows: the contract first, then a sub-heading per kind of patch, ready first in each. */
 	private void farmFavouriteRows(Extras x, Map<String, PatchView> byId, List<String> shown)
 	{
-		for (String id : FarmRows.readyFirst(shown, id -> FarmGroups.CONTRACT_ID.equals(id) ? x.contract.ready : byId.get(id).ready))
+		List<PatchView> ps = new ArrayList<>();
+		for (String id : shown)
 		{
-			list.add(card(FarmGroups.CONTRACT_ID.equals(id) ? contractCard(x) : patchCard(x, byId.get(id)), 0));
+			if (FarmGroups.CONTRACT_ID.equals(id))
+			{
+				list.add(subHeader(CONTRACT, 1));
+				list.add(card(contractCard(x), 0));
+			}
+			else
+			{
+				ps.add(byId.get(id));
+			}
 		}
+		kindRows(x, ps);
+	}
+
+	/** Patches under a sub-heading per kind (Herbs, Hardwood...), in name order, ready first in each. */
+	private void kindRows(Extras x, List<PatchView> ps)
+	{
+		for (Map.Entry<String, List<PatchView>> e : byKind(ps).entrySet())
+		{
+			list.add(subHeader(e.getKey(), e.getValue().size()));
+			for (PatchView p : FarmRows.readyFirst(e.getValue(), v -> v.ready))
+			{
+				list.add(card(patchCard(x, p), 0));
+			}
+		}
+	}
+
+	/** Patches by their kind's label (its key when it has none), labels in name order, each list in the order given. */
+	static Map<String, List<PatchView>> byKind(List<PatchView> ps)
+	{
+		Map<String, List<PatchView>> groups = new TreeMap<>();
+		for (PatchView p : ps)
+		{
+			groups.computeIfAbsent(p.kindLabel.isEmpty() ? p.kind : p.kindLabel, k -> new ArrayList<>()).add(p);
+		}
+		return groups;
 	}
 
 	/** The Farming tab: the view its chip picks. Ready rows come first in each. */
@@ -1033,19 +1067,7 @@ class GoalsPanel extends PluginPanel
 			list.add(note(none));
 			return;
 		}
-		Map<String, List<PatchView>> groups = new TreeMap<>();
-		for (PatchView p : ps)
-		{
-			groups.computeIfAbsent(p.kindLabel.isEmpty() ? p.kind : p.kindLabel, k -> new ArrayList<>()).add(p);
-		}
-		for (Map.Entry<String, List<PatchView>> e : groups.entrySet())
-		{
-			list.add(subHeader(e.getKey(), e.getValue().size()));
-			for (PatchView p : FarmRows.readyFirst(e.getValue(), v -> v.ready))
-			{
-				list.add(card(patchCard(x, p), 0));
-			}
-		}
+		kindRows(x, ps);
 	}
 
 	/** A small heading inside a group (one kind of patch), with its count; it doesn't fold. */
