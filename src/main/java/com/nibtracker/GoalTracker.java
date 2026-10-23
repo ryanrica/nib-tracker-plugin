@@ -469,11 +469,17 @@ class GoalTracker
 	 */
 	private List<Routines.Patch> farmRows(long now)
 	{
-		if (!received || predictor == null || !sink.allowed("farming", config.sendFarming()))
+		if (!localFarming())
 		{
 			return feedFarm;
 		}
 		return FarmRows.merge(predictor.predict(farmingTracker.entries(), now), feedFarm);
+	}
+
+	/** Whether farming is worked out here from Time Tracking: while linked and farming timers are on. */
+	private boolean localFarming()
+	{
+		return received && predictor != null && sink.allowed("farming", config.sendFarming());
 	}
 
 	/**
@@ -490,6 +496,11 @@ class GoalTracker
 		x.farmPinned = pins.contains(FARMING);
 		x.pins.addAll(pins);
 		x.favourites.putAll(Favourites.parse(config.favourites()));
+		// Spirit trees are shown on their own, never as farm timers.
+		if (localFarming())
+		{
+			x.spiritTrees.addAll(predictor.spiritTrees(farmingTracker.entries(), now));
+		}
 
 		List<Routines.Daily> sorted = new ArrayList<>(dailies);
 		Map<String, Long> dueAt = new HashMap<>();

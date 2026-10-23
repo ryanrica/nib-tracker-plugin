@@ -138,6 +138,8 @@ class GoalsPanel extends PluginPanel
 		Color valueColour = MUTED;
 		double progress = -1;
 		boolean barDone;
+		/* The bar's colour, or null for the usual (green when done, else by progress). */
+		Color barColour;
 		String sub = "";
 		Color subColour = MUTED;
 		String tooltip;
@@ -161,6 +163,8 @@ class GoalsPanel extends PluginPanel
 	private static final String SPECIAL = "Special";
 	private static final String ALL_TREES = "All trees";
 	private static final String CONTRACT = "Farming contract";
+	/* After the kind chips: whether each spirit tree spot has a tree (never a farm timer). */
+	private static final String SPIRIT_TREES = "Spirit trees";
 	private static final List<String> FARM_GROUPS = Arrays.asList(ALL_PATCHES, FAVOURITES, SPECIAL, ALL_TREES, CONTRACT);
 	/* Sub-filter values in the order they're offered. */
 	private static final List<String> TAG_ORDER = Arrays.asList("Easy", "Medium", "Hard", "Elite", "Master", "Grandmaster", "Not started", "In progress");
@@ -336,9 +340,14 @@ class GoalsPanel extends PluginPanel
 			}
 			List<String> chips = new ArrayList<>(FARM_GROUPS);
 			chips.addAll(kindChips(extras.patches));
+			if (!extras.allRegions.isEmpty() && !extras.spiritTrees.isEmpty())
+			{
+				chips.add(SPIRIT_TREES);
+			}
 			kindIcons.put(SPECIAL, ItemID.HESPORI_SEED);
 			kindIcons.put(ALL_TREES, ItemID.MAGIC_LOGS);
 			kindIcons.put(CONTRACT, extras.contract != null && extras.contract.itemId > 0 ? extras.contract.itemId : ItemID.SEED_BOX);
+			kindIcons.put(SPIRIT_TREES, ItemID.PLANTPOT_SPIRIT_TREE_SAPLING);
 			Map<String, Icon> fixed = new HashMap<>();
 			fixed.put(ALL_PATCHES, farmingIcon(14));
 			fixed.put(FAVOURITES, new Glyph(true, true));
@@ -370,7 +379,8 @@ class GoalsPanel extends PluginPanel
 		List<String> kinds = new ArrayList<>();
 		for (PatchView p : patches)
 		{
-			if (!p.kindLabel.isEmpty() && !FarmGroups.tree(p.kind) && !kinds.contains(p.kindLabel) && !FARM_GROUPS.contains(p.kindLabel))
+			if (!p.kindLabel.isEmpty() && !FarmGroups.tree(p.kind) && !kinds.contains(p.kindLabel) && !FARM_GROUPS.contains(p.kindLabel)
+				&& !SPIRIT_TREES.equals(p.kindLabel))
 			{
 				kinds.add(p.kindLabel);
 			}
@@ -631,6 +641,8 @@ class GoalsPanel extends PluginPanel
 		/* Each tab's favourite row ids, and everything on the game screen (goal ids, "daily:<id>", group pins). */
 		final Map<String, Set<String>> favourites = new HashMap<>();
 		final Set<String> pins = new HashSet<>();
+		/* Each spirit tree spot and whether a tree is planted there, worked out here; empty when farming is not. */
+		final List<PatchPredictor.SpiritTree> spiritTrees = new ArrayList<>();
 	}
 
 	static final class DailyView
@@ -848,8 +860,40 @@ class GoalsPanel extends PluginPanel
 					list.add(card(contractCard(x), 0));
 				}
 				break;
+			case SPIRIT_TREES:
+				spiritTrees(x);
+				break;
 			default:
 				runOrder(x, f);
+		}
+	}
+
+	/** Spirit trees: each spot and whether a tree is planted there; a green bar when grown, amber when diseased or dead. */
+	private void spiritTrees(Extras x)
+	{
+		String key = "farm:" + SPIRIT_TREES;
+		list.add(sectionHeader(key, SPIRIT_TREES, x.spiritTrees.size(), null, null, null, false));
+		if (collapsed.contains(key))
+		{
+			return;
+		}
+		for (PatchPredictor.SpiritTree t : x.spiritTrees)
+		{
+			boolean grown = "Grown".equals(t.state);
+			boolean attention = "Diseased".equals(t.state) || "Dead".equals(t.state);
+			Card c = new Card();
+			c.icon = cropIcon(ItemID.PLANTPOT_SPIRIT_TREE_SAPLING);
+			c.title = t.region;
+			c.value = t.state;
+			c.edge = grown ? DONE : attention ? AMBER : UNKNOWN;
+			c.valueColour = grown ? DONE : attention ? AMBER : MUTED;
+			if (grown || attention)
+			{
+				c.progress = 1;
+				c.barDone = grown;
+				c.barColour = attention ? AMBER : null;
+			}
+			list.add(card(c, 0));
 		}
 	}
 
@@ -1591,6 +1635,7 @@ class GoalsPanel extends PluginPanel
 			Bar bar = new Bar();
 			bar.setPreferredSize(new Dimension(0, 5));
 			bar.set(c.progress, c.barDone);
+			bar.fixed = c.barColour;
 			body.add(bar);
 		}
 
@@ -1938,6 +1983,8 @@ class GoalsPanel extends PluginPanel
 	{
 		private double value;
 		private boolean done;
+		/* A set colour for the fill (amber for a diseased spirit tree), or null for the usual. */
+		Color fixed;
 
 		void set(double value, boolean done)
 		{
@@ -1958,7 +2005,7 @@ class GoalsPanel extends PluginPanel
 			int fill = (int) Math.round(w * value);
 			if (fill > 0)
 			{
-				g2.setColor(done ? DONE : colour(value));
+				g2.setColor(fixed != null ? fixed : done ? DONE : colour(value));
 				g2.fillRoundRect(0, 0, Math.max(fill, h), h, h, h);
 			}
 			g2.dispose();

@@ -111,4 +111,53 @@ public class PatchPredictorTest
 		// With a 5 minute offset the ticks fall 5 minutes earlier: T - 5 min is the boundary, ready 4 ticks later.
 		assertEquals((T - 5 * 60 + 80 * 60) * 1000, TT.predict(e, T * 1000).get(0).readyAt);
 	}
+
+	private static PatchPredictor.SpiritTree spirit(List<PatchPredictor.SpiritTree> trees, String region)
+	{
+		for (PatchPredictor.SpiritTree t : trees)
+		{
+			if (region.equals(t.region))
+			{
+				return t;
+			}
+		}
+		throw new AssertionError("no spirit tree spot " + region);
+	}
+
+	@Test
+	public void spiritTreesEveryStateAndSpot()
+	{
+		Map<String, String> e = new HashMap<>();
+		e.put("12082.4771", "3:" + T); // Port Sarim: weeds
+		e.put("11058.4772", "20:" + T); // Brimhaven: grown
+		e.put("10300.4772", "10:" + T); // Etceteria: growing, stage 2 of 12
+		e.put("6967.7904", "25:" + T); // Kourend (Hosidius): diseased
+		List<PatchPredictor.SpiritTree> trees = TT.spiritTrees(e, T * 1000);
+		assertEquals(5, trees.size());
+		assertEquals("Not planted", spirit(trees, "Port Sarim").state);
+		assertEquals("Grown", spirit(trees, "Brimhaven").state);
+		assertEquals(1, spirit(trees, "Brimhaven").progress, 0);
+		PatchPredictor.SpiritTree growing = spirit(trees, "Etceteria");
+		assertEquals("Growing", growing.state);
+		assertEquals(2 / 12.0, growing.progress, 1e-9);
+		assertEquals("Diseased", spirit(trees, "Hosidius").state);
+		assertEquals("Unknown", spirit(trees, "Farming Guild").state);
+		assertEquals(-1, spirit(trees, "Farming Guild").progress, 0);
+
+		// Spirit trees grow every 320 minutes; ten more ticks and it's grown.
+		long later = (T + 10 * 320 * 60) * 1000;
+		assertEquals("Grown", spirit(TT.spiritTrees(e, later), "Etceteria").state);
+		assertEquals("Growing", spirit(TT.spiritTrees(e, later - 320 * 60 * 1000L), "Etceteria").state);
+	}
+
+	@Test
+	public void spiritTreeDeadAndLateGrownStage()
+	{
+		Map<String, String> e = new HashMap<>();
+		e.put("4922.4771", "35:" + T);
+		e.put("11058.4772", "44:" + T);
+		List<PatchPredictor.SpiritTree> trees = TT.spiritTrees(e, T * 1000);
+		assertEquals("Dead", spirit(trees, "Farming Guild").state);
+		assertEquals("Grown", spirit(trees, "Brimhaven").state);
+	}
 }

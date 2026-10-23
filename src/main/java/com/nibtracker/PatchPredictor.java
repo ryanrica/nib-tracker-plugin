@@ -10,6 +10,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -251,6 +252,69 @@ final class PatchPredictor
 			}
 		}
 		return rows;
+	}
+
+	/** A spirit tree spot: where it is, what's there (Not planted, Growing, Grown, Diseased, Dead, Unknown), and growth 0..1 (-1 unknown). */
+	static final class SpiritTree
+	{
+		final String region;
+		final String state;
+		final double progress;
+
+		SpiritTree(String region, String state, double progress)
+		{
+			this.region = region;
+			this.state = state;
+			this.progress = progress;
+		}
+	}
+
+	/**
+	 * Every spirit tree spot at nowMs, by place name, whether or not Time Tracking has saved it (Unknown when not). Grown
+	 * is the final stage, worked out with the same growth ticks as any patch. These are never farm timers.
+	 */
+	List<SpiritTree> spiritTrees(Map<String, String> entries, long nowMs)
+	{
+		long now = Math.floorDiv(nowMs, 1000);
+		Offset tt = new Offset();
+		tt.mins = number(entries.get("farmTickOffset"));
+		tt.precision = number(entries.get("farmTickOffsetPrecision"));
+		List<SpiritTree> out = new ArrayList<>();
+		for (Map.Entry<String, Spot> e : patches.entrySet())
+		{
+			Spot spot = e.getValue();
+			if (!NO_TRACK.equals(spot.impl))
+			{
+				continue;
+			}
+			String region = "Kourend".equals(spot.region) ? "Hosidius" : spot.region;
+			long[] saved = saved(entries.get(e.getKey()));
+			Routines.Patch p = saved == null ? null : patch(spot, (int) saved[0], saved[1], now, tt, false);
+			if (p == null)
+			{
+				out.add(new SpiritTree(region, "Unknown", -1));
+				continue;
+			}
+			switch (p.state)
+			{
+				case "ready":
+					out.add(new SpiritTree(region, "Grown", 1));
+					break;
+				case "empty":
+					out.add(new SpiritTree(region, "Not planted", -1));
+					break;
+				case "diseased":
+					out.add(new SpiritTree(region, "Diseased", p.progress));
+					break;
+				case "dead":
+					out.add(new SpiritTree(region, "Dead", p.progress));
+					break;
+				default:
+					out.add(new SpiritTree(region, "Growing", p.progress));
+			}
+		}
+		out.sort(Comparator.comparing(t -> t.region));
+		return out;
 	}
 
 	private Routines.Patch patch(Spot patch, int value, long time, long now, Offset tt, boolean autoweed)
