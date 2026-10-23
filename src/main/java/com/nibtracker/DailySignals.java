@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.IntUnaryOperator;
@@ -77,6 +78,49 @@ final class DailySignals
 		ICONS = Collections.unmodifiableMap(m);
 	}
 
+	/* The webapp's built-in task labels, lower case, so a feed with no key still names its task exactly. */
+	private static final Map<String, String> LABELS;
+
+	static
+	{
+		Map<String, String> m = new HashMap<>();
+		m.put("tears of guthix", TEARS);
+		m.put("kingdom of miscellania (keep approval up)", MISCELLANIA);
+		m.put("zaff's battlestaves", "zaff_staves");
+		m.put("bert's buckets of sand", "bert_sand");
+		m.put("wizard cromperty's pure essence", "cromperty_essence");
+		m.put("flax to bow strings (seers)", "seers_flax");
+		m.put("lundail's free runes", "lundail_runes");
+		m.put("rantz's ogre arrows", "rantz_arrows");
+		m.put("nightmare zone herb boxes", "nmz_herb_boxes");
+		m.put("thirus's dynamite", "thirus_dynamite");
+		m.put("explorer's ring alchs", "explorers_ring");
+		m.put("robin's buckets of slime (port phasmatys)", "robin_slime");
+		LABELS = Collections.unmodifiableMap(m);
+	}
+
+	/* The webapp's loose icon matches, in its order: words in the label -> task key. Icons only, never auto-done. */
+	private static final String[][] KEYWORDS = {
+		{"tears of guthix", TEARS},
+		{"miscellania", MISCELLANIA},
+		{"battlestaff", "zaff_staves"},
+		{"battlestave", "zaff_staves"},
+		{"slime", "robin_slime"},
+		{"robin", "robin_slime"},
+		{"sand", "bert_sand"},
+		{"essence", "cromperty_essence"},
+		{"bow string", "seers_flax"},
+		{"flax", "seers_flax"},
+		{"lundail", "lundail_runes"},
+		{"ogre arrow", "rantz_arrows"},
+		{"rantz", "rantz_arrows"},
+		{"herb box", "nmz_herb_boxes"},
+		{"nightmare zone", "nmz_herb_boxes"},
+		{"dynamite", "thirus_dynamite"},
+		{"thirus", "thirus_dynamite"},
+		{"explorer", "explorers_ring"},
+	};
+
 	/* The claim flags, done when set: task key -> varbit. */
 	private static final Map<String, Integer> FLAGS;
 
@@ -107,14 +151,40 @@ final class DailySignals
 		VARBITS = Collections.unmodifiableSet(s);
 	}
 
-	/** A task's icon item: the feed's, else the table's, else coins. */
+	/**
+	 * Which built-in task this is: the feed's key, else the one whose built-in label matches exactly (ignoring case), else
+	 * empty. Only this is used to tick tasks off, so a task the player named is never auto-done.
+	 */
+	static String keyFor(Routines.Daily d)
+	{
+		if (!d.key.isEmpty())
+		{
+			return d.key;
+		}
+		return LABELS.getOrDefault(d.label.trim().toLowerCase(Locale.ROOT), "");
+	}
+
+	/** A task's icon item: the feed's, else its built-in task's, else a loose match on the label, else coins. */
 	static int icon(Routines.Daily d)
 	{
 		if (d.itemId > 0)
 		{
 			return d.itemId;
 		}
-		return ICONS.getOrDefault(d.key, ItemID.COINS);
+		String key = keyFor(d);
+		if (key.isEmpty())
+		{
+			String label = d.label.toLowerCase(Locale.ROOT);
+			for (String[] k : KEYWORDS)
+			{
+				if (label.contains(k[0]))
+				{
+					key = k[1];
+					break;
+				}
+			}
+		}
+		return ICONS.getOrDefault(key, ItemID.COINS);
 	}
 
 	/** The keys of the tasks whose claim flag says they're done today. */
@@ -213,7 +283,8 @@ final class DailySignals
 		List<Routines.Daily> out = new ArrayList<>();
 		for (Routines.Daily d : dailies)
 		{
-			if (!d.key.isEmpty() && claimed.contains(d.key) && sent.add(d.key))
+			String key = keyFor(d);
+			if (!key.isEmpty() && claimed.contains(key) && sent.add(key))
 			{
 				out.add(d);
 			}

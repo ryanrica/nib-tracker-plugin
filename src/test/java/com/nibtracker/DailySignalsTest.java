@@ -173,4 +173,44 @@ public class DailySignalsTest
 		assertEquals(ItemID.COINS, DailySignals.icon(daily("x", "")));
 		assertEquals(ItemID.POH_TREASURE_TEAK, (int) DailySignals.ICONS.get("miscellania"));
 	}
+
+	private static Routines.Daily labelled(String label)
+	{
+		return new Routines.Daily(label, label, "daily", 1, 0);
+	}
+
+	@Test
+	public void exactLabelWithoutKeyGetsTheKey()
+	{
+		assertEquals("bert_sand", DailySignals.keyFor(labelled("Bert's buckets of sand")));
+		assertEquals("miscellania", DailySignals.keyFor(labelled("kingdom of miscellania (keep approval up)")));
+		assertEquals("robin_slime", DailySignals.keyFor(labelled("Robin's buckets of slime (Port Phasmatys)")));
+		assertEquals("tears_of_guthix", DailySignals.keyFor(labelled(" TEARS OF GUTHIX ")));
+		Routines.Daily keyed = labelled("Whatever");
+		keyed.key = "zaff_staves";
+		assertEquals("zaff_staves", DailySignals.keyFor(keyed));
+		assertEquals("", DailySignals.keyFor(labelled("Sand mining")));
+	}
+
+	@Test
+	public void exactLabelWithoutKeyGetsIconAndIsAutoDone()
+	{
+		Routines.Daily d = labelled("Bert's buckets of sand");
+		assertEquals(ItemID.BUCKET_SAND, DailySignals.icon(d));
+		List<Routines.Daily> done = DailySignals.newlyDone(Collections.singleton("bert_sand"), new HashSet<>(),
+			Collections.singletonList(d));
+		assertEquals(1, done.size());
+	}
+
+	@Test
+	public void customLabelGetsIconButIsNeverAutoDone()
+	{
+		Routines.Daily d = labelled("Sand mining");
+		assertEquals(ItemID.BUCKET_SAND, DailySignals.icon(d));
+		Set<String> all = new HashSet<>(DailySignals.ICONS.keySet());
+		assertTrue(DailySignals.newlyDone(all, new HashSet<>(), Collections.singletonList(d)).isEmpty());
+		assertEquals(ItemID.LOVAKENGJ_DYNAMITE_FUSED, DailySignals.icon(labelled("Buy Thirus stuff")));
+		assertEquals(ItemID.BATTLESTAFF, DailySignals.icon(labelled("Battlestaff run")));
+		assertEquals(ItemID.NZONE_HERBBOX, DailySignals.icon(labelled("Nightmare Zone boxes")));
+	}
 }

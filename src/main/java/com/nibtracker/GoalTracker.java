@@ -865,7 +865,7 @@ class GoalTracker
 	{
 		if (d.condition())
 		{
-			boolean due = DailySignals.MISCELLANIA.equals(d.key) && misc != null ? misc : Boolean.TRUE.equals(d.due);
+			boolean due = DailySignals.MISCELLANIA.equals(DailySignals.keyFor(d)) && misc != null ? misc : Boolean.TRUE.equals(d.due);
 			return due ? 0 : Long.MAX_VALUE;
 		}
 		Long mine = tickedOff.get(d.id);
@@ -983,7 +983,7 @@ class GoalTracker
 	 */
 	private void markDone(Routines.Daily d)
 	{
-		if (d.condition() && DailySignals.MISCELLANIA.equals(d.key))
+		if (d.condition() && DailySignals.MISCELLANIA.equals(DailySignals.keyFor(d)))
 		{
 			topUp();
 			sendMisc(d, false);
@@ -992,9 +992,10 @@ class GoalTracker
 		tickedOff.put(d.id, Routines.nextDue(d, System.currentTimeMillis()));
 		JsonObject data = new JsonObject();
 		data.addProperty("id", d.id);
-		if (!d.key.isEmpty())
+		String key = DailySignals.keyFor(d);
+		if (!key.isEmpty())
 		{
-			data.addProperty("key", d.key);
+			data.addProperty("key", key);
 		}
 		data.addProperty("label", d.label);
 		sink.emit("chore_done", data);
@@ -1078,11 +1079,11 @@ class GoalTracker
 		}
 		for (Routines.Daily d : dailies)
 		{
-			if (d.condition() && DailySignals.MISCELLANIA.equals(d.key) && Boolean.FALSE.equals(d.due))
+			if (d.condition() && DailySignals.MISCELLANIA.equals(DailySignals.keyFor(d)) && Boolean.FALSE.equals(d.due))
 			{
 				for (Routines.Daily b : before)
 				{
-					if (b.condition() && DailySignals.MISCELLANIA.equals(b.key) && Boolean.TRUE.equals(b.due))
+					if (b.condition() && DailySignals.MISCELLANIA.equals(DailySignals.keyFor(b)) && Boolean.TRUE.equals(b.due))
 					{
 						topUp();
 						return;
@@ -1152,7 +1153,7 @@ class GoalTracker
 		}
 		for (Routines.Daily d : dailies)
 		{
-			if (DailySignals.MISCELLANIA.equals(d.key) && d.condition())
+			if (DailySignals.MISCELLANIA.equals(DailySignals.keyFor(d)) && d.condition())
 			{
 				if (!live)
 				{
@@ -1173,7 +1174,7 @@ class GoalTracker
 	private void sendMisc(Routines.Daily d, boolean due)
 	{
 		JsonObject data = new JsonObject();
-		data.addProperty("key", d.key);
+		data.addProperty("key", DailySignals.keyFor(d));
 		data.addProperty("due", due);
 		sink.emit("chore_state", data);
 		miscSent = due;
@@ -1201,7 +1202,7 @@ class GoalTracker
 				togSawTears = false;
 				for (Routines.Daily d : dailies)
 				{
-					if (played && DailySignals.TEARS.equals(d.key))
+					if (played && DailySignals.TEARS.equals(DailySignals.keyFor(d)))
 					{
 						gameDone(d, true);
 					}
