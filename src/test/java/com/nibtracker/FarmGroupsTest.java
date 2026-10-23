@@ -184,6 +184,15 @@ public class FarmGroupsTest
 	}
 
 	@Test
+	public void specialKindsHaveTheirOwnPicture()
+	{
+		assertEquals(ItemID.CRYSTAL_TREE_SEED, FarmGroups.kindIcon("crystal_tree"));
+		assertEquals(ItemID.GIANT_SEAWEED, FarmGroups.kindIcon("seaweed"));
+		assertEquals(ItemID.BITTERCAP_MUSHROOM, FarmGroups.kindIcon("mushroom"));
+		assertEquals(0, FarmGroups.kindIcon("herb"));
+	}
+
+	@Test
 	public void favouritesGroupByKindLabelInNameOrder()
 	{
 		GoalsPanel.PatchView herb1 = view("herb", "Herbs"), bush = view("bush", "Bushes"), herb2 = view("herb", "Herbs"),

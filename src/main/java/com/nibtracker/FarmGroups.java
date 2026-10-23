@@ -133,6 +133,28 @@ final class FarmGroups
 		return TREES.contains(kind);
 	}
 
+	/* A picture for each kind of special patch, for when none of its patches has a crop to show (no Time Tracking data). */
+	private static final Map<String, Integer> KIND_ICONS = new HashMap<>();
+
+	static
+	{
+		KIND_ICONS.put("crystal_tree", ItemID.CRYSTAL_TREE_SEED);
+		KIND_ICONS.put("seaweed", ItemID.GIANT_SEAWEED);
+		KIND_ICONS.put("mushroom", ItemID.BITTERCAP_MUSHROOM);
+		KIND_ICONS.put("calquat", ItemID.CALQUAT_FRUIT);
+		KIND_ICONS.put("celastrus", ItemID.CELASTRUS_TREE_SEED);
+		KIND_ICONS.put("belladonna", ItemID.BELLADONNA_SEED);
+		KIND_ICONS.put("anima", ItemID.ANIMA_KRONOS);
+		KIND_ICONS.put("hespori", ItemID.HESPORI_SEED);
+		KIND_ICONS.put("cactus", ItemID.CACTUS_SPINE);
+	}
+
+	/** The kind's own picture, or 0 when it has none (its crops' pictures are used). */
+	static int kindIcon(String kind)
+	{
+		return KIND_ICONS.getOrDefault(kind, 0);
+	}
+
 	/** The contract for this produce item id, or null when it isn't a contract crop. */
 	static Contract contract(int itemId)
 	{

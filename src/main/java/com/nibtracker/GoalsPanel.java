@@ -339,6 +339,14 @@ class GoalsPanel extends PluginPanel
 					kindIcons.putIfAbsent(p.kindLabel, p.itemId);
 				}
 			}
+			// Kinds with no crop to show yet (no Time Tracking data) use their own picture.
+			for (PatchView p : extras.patches)
+			{
+				if (FarmGroups.kindIcon(p.kind) > 0)
+				{
+					kindIcons.putIfAbsent(p.kindLabel, FarmGroups.kindIcon(p.kind));
+				}
+			}
 			List<String> chips = new ArrayList<>(FARM_GROUPS);
 			chips.addAll(kindChips(extras.patches));
 			if (!extras.allRegions.isEmpty() && !extras.spiritTrees.isEmpty())
