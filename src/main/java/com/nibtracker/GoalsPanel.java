@@ -324,24 +324,18 @@ class GoalsPanel extends PluginPanel
 		}
 		else if (FARMING.equals(view))
 		{
-			// The groups first, then one chip per kind of patch you have a timer on (Herbs, Trees, Fruit trees, Hespori...),
-			// each with its crop's icon.
-			List<String> kinds = new ArrayList<>();
+			// The groups first, then one chip per kind of patch you have a timer on (Herbs, Fruit trees, Hespori...), each
+			// with its crop's icon.
 			Map<String, Integer> kindIcons = new HashMap<>();
 			for (PatchView p : extras.patches)
 			{
-				if (!p.kindLabel.isEmpty() && !kinds.contains(p.kindLabel) && !FARM_GROUPS.contains(p.kindLabel))
-				{
-					kinds.add(p.kindLabel);
-				}
 				if (p.itemId > 0)
 				{
 					kindIcons.putIfAbsent(p.kindLabel, p.itemId);
 				}
 			}
-			kinds.sort(String::compareTo);
 			List<String> chips = new ArrayList<>(FARM_GROUPS);
-			chips.addAll(kinds);
+			chips.addAll(kindChips(extras.patches));
 			kindIcons.put(SPECIAL, ItemID.HESPORI_SEED);
 			kindIcons.put(ALL_TREES, ItemID.MAGIC_LOGS);
 			kindIcons.put(CONTRACT, extras.contract != null && extras.contract.itemId > 0 ? extras.contract.itemId : ItemID.SEED_BOX);
@@ -365,6 +359,24 @@ class GoalsPanel extends PluginPanel
 		// whole panel is laid out and painted again; repainting only the list left old chips drawn over the goals.
 		revalidate();
 		repaint();
+	}
+
+	/**
+	 * The Farming tab's kind chips, sorted: each patch kind's label once, leaving out tree kinds (All trees has them) and
+	 * any label a group chip already uses.
+	 */
+	static List<String> kindChips(List<PatchView> patches)
+	{
+		List<String> kinds = new ArrayList<>();
+		for (PatchView p : patches)
+		{
+			if (!p.kindLabel.isEmpty() && !FarmGroups.tree(p.kind) && !kinds.contains(p.kindLabel) && !FARM_GROUPS.contains(p.kindLabel))
+			{
+				kinds.add(p.kindLabel);
+			}
+		}
+		kinds.sort(String::compareTo);
+		return kinds;
 	}
 
 	private void redraw()
@@ -825,10 +837,10 @@ class GoalsPanel extends PluginPanel
 				farmFavourites(x);
 				break;
 			case SPECIAL:
-				farmGroup(x, SPECIAL, Favourites.SPECIAL_PIN, FarmGroups::special, "No special patches with timers yet.", true);
+				farmGroup(x, SPECIAL, Favourites.SPECIAL_PIN, FarmGroups::special, "No special patches with timers yet.");
 				break;
 			case ALL_TREES:
-				farmGroup(x, ALL_TREES, Favourites.TREES_PIN, FarmGroups::tree, "No tree patches with timers yet.", false);
+				farmGroup(x, ALL_TREES, Favourites.TREES_PIN, FarmGroups::tree, "No tree patches with timers yet.");
 				break;
 			case CONTRACT:
 				if (x.contract != null)
@@ -969,8 +981,8 @@ class GoalsPanel extends PluginPanel
 		}
 	}
 
-	/** Special (under a heading per kind) or All trees (one flat list, ready first): hidden regions too (hiding is for All patches only). */
-	private void farmGroup(Extras x, String name, String pin, Predicate<String> kinds, String none, boolean byKind)
+	/** Special or All trees, under a heading per kind, ready first: hidden regions too (hiding is for All patches only). */
+	private void farmGroup(Extras x, String name, String pin, Predicate<String> kinds, String none)
 	{
 		List<PatchView> ps = new ArrayList<>();
 		for (PatchView p : x.patches)
@@ -989,14 +1001,6 @@ class GoalsPanel extends PluginPanel
 		if (ps.isEmpty())
 		{
 			list.add(note(none));
-			return;
-		}
-		if (!byKind)
-		{
-			for (PatchView p : FarmRows.readyFirst(ps, v -> v.ready))
-			{
-				list.add(card(patchCard(x, p), 0));
-			}
 			return;
 		}
 		Map<String, List<PatchView>> groups = new TreeMap<>();

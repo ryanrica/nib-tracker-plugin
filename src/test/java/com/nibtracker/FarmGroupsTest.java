@@ -174,4 +174,21 @@ public class FarmGroupsTest
 		assertEquals("Contract: Ranarr · Farming Guild herb patch", view(ranarr()).title);
 		assertEquals("Contract: Apple · Farming Guild fruit tree patch", view(FarmGroups.contract(ItemID.COOKING_APPLE)).title);
 	}
+
+	private static GoalsPanel.PatchView view(String kind, String kindLabel)
+	{
+		GoalsPanel.PatchView v = new GoalsPanel.PatchView("Catherby", "Crop", "", "", "", "", false, 0);
+		v.kind = kind;
+		v.kindLabel = kindLabel;
+		return v;
+	}
+
+	@Test
+	public void kindChipsLeaveOutTreesAndGroups()
+	{
+		List<GoalsPanel.PatchView> ps = Arrays.asList(view("herb", "Herbs"), view("tree", "Trees"), view("hardwood", "Hardwood"),
+			view("redwood", "Redwood"), view("fruit_tree", "Fruit trees"), view("herb", "Herbs"), view("hespori", "Hespori"),
+			view("x", ""));
+		assertEquals(Arrays.asList("Fruit trees", "Herbs", "Hespori"), GoalsPanel.kindChips(ps));
+	}
 }
