@@ -54,7 +54,7 @@ public class GoalProgressTest
 		GoalProgress.Result r = GoalProgress.compute(g, f);
 		assertEquals(0.5, r.progress, 0.001);
 		assertEquals("92 / 99", r.detail);
-		assertEquals("6,517,178 XP to go", r.hint);
+		assertEquals("6,517,178 XP left", r.hint);
 		assertFalse(r.done);
 
 		f.xp.put("woodcutting", 13_034_431L);
@@ -74,7 +74,7 @@ public class GoalProgressTest
 		GoalProgress.Result r = GoalProgress.compute(g, f);
 		assertEquals(0.25, r.progress, 0.0001);
 		assertEquals("50,000 / 200K", r.detail);
-		assertEquals("150,000 XP to go", r.hint);
+		assertEquals("150,000 XP left", r.hint);
 	}
 
 	@Test
@@ -89,7 +89,7 @@ public class GoalProgressTest
 		GoalProgress.Result r = GoalProgress.compute(g, f);
 		assertEquals(0.5, r.progress, 0.0001);
 		assertEquals("Lowest 1", r.detail);
-		assertEquals("1 skill below 70, 737,627 XP to go", r.hint);
+		assertEquals("1 skill below 70  ·  737,627 XP left", r.hint);
 		assertFalse(r.done);
 	}
 
@@ -101,7 +101,7 @@ public class GoalProgressTest
 		GoalProgress.Result r = GoalProgress.compute(g, f);
 		assertEquals(0.4, r.progress, 0.0001);
 		assertEquals("40 / 100", r.detail);
-		assertEquals("60 more kills", r.hint);
+		assertEquals("60 kills left", r.hint);
 
 		f.kcAliases = Collections.singletonMap("barrows", "barrows_chests");
 		f.kc.put(GoalProgress.metric("Barrows", f.kcAliases), 100);

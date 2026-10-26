@@ -171,6 +171,38 @@ public interface NibTrackerConfig extends Config
 		return true;
 	}
 
+	enum FarmFavourites
+	{
+		RUN_ORDER("In run order"),
+		BY_KIND("By kind of patch");
+
+		private final String label;
+
+		FarmFavourites(String label)
+		{
+			this.label = label;
+		}
+
+		@Override
+		public String toString()
+		{
+			return label;
+		}
+	}
+
+	// Unreleased under "farmFavouritesView" (which saved its first default, by kind); a new key so run order is the default.
+	@ConfigItem(keyName = "farmFavouritesOrder", name = "Farming favourites", description = "How Overview lists your favourite patches: by kind of patch (herbs, trees...), or in run order, one stop per place with the teleport to get there", section = goals, position = 38)
+	default FarmFavourites farmFavouritesView()
+	{
+		return FarmFavourites.RUN_ORDER;
+	}
+
+	@ConfigItem(keyName = "excludedTeleports", name = "Teleports to skip", description = "Teleports the farm run shouldn't use, separated by commas (book of the dead, say, when it's out of charges). Capitals, spacing and apostrophes don't matter. Each stop uses its next best way there instead.", section = goals, position = 39)
+	default String excludedTeleports()
+	{
+		return "";
+	}
+
 	/* Farming regions hidden in the panel. Set from the Farming section's right-click menu. */
 	String HIDDEN_FARM_REGIONS = "hiddenFarmRegions";
 
@@ -187,6 +219,24 @@ public interface NibTrackerConfig extends Config
 	default String pinnedGoals()
 	{
 		return "";
+	}
+
+	/* Overview's sections in the player's order (names, comma separated), dragged in the panel. See GoalLayout.overviewOrder. */
+	String OVERVIEW_ORDER = "overviewOrder";
+
+	@ConfigItem(keyName = OVERVIEW_ORDER, name = "", description = "", hidden = true)
+	default String overviewOrder()
+	{
+		return "";
+	}
+
+	/* Whether Overview's tip on reordering its sections has been hidden (its Hide link). */
+	String OVERVIEW_TIP_HIDDEN = "overviewTipHidden";
+
+	@ConfigItem(keyName = OVERVIEW_TIP_HIDDEN, name = "", description = "", hidden = true)
+	default boolean overviewTipHidden()
+	{
+		return false;
 	}
 
 	/* Favourites per tab, saved by Favourites.write. */

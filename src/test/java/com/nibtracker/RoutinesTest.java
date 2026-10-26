@@ -90,4 +90,17 @@ public class RoutinesTest
 		assertEquals("1 ready", Routines.summary(Arrays.asList(ready, later), NOON));
 		assertEquals("next 34m", Routines.summary(Arrays.asList(later), NOON));
 	}
+
+	@Test
+	public void routeStopsWithTheirTeleportsBestFirst()
+	{
+		List<Routines.Stop> r = Routines.route(new JsonParser().parse(
+			"[{\"stop\":1,\"place\":\"Ardougne\",\"teles\":[{\"travel\":\"Ardougne cloak 2\",\"cat\":\"ITEM\",\"item\":\"Ardougne cloak 2\"},{\"travel\":\"Ardougne Teleport\",\"cat\":\"SPELLBOOK\"}]},"
+				+ "{\"stop\":0,\"place\":\"Nowhere\"},{\"stop\":2,\"place\":\"\"}]"));
+		assertEquals(1, r.size());
+		assertEquals("Ardougne", r.get(0).place);
+		assertEquals(Arrays.asList("Ardougne cloak 2", "Ardougne Teleport"), Arrays.asList(r.get(0).teles.get(0).travel, r.get(0).teles.get(1).travel));
+		assertEquals("", r.get(0).teles.get(1).item);
+		assertTrue(Routines.route(null).isEmpty());
+	}
 }

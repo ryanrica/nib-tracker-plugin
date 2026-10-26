@@ -104,7 +104,7 @@ final class GoalProgress
 
 	/**
 	 * A goal's state for display. progress is 0..1, or -1 when there's nothing to measure. detail is the short value
-	 * ("73 / 80"), hint what's left ("1,234,567 XP to go"); either may be empty.
+	 * ("73 / 80"), hint what's left ("1,234,567 XP left"); either may be empty.
 	 */
 	static final class Result
 	{
@@ -233,7 +233,7 @@ final class GoalProgress
 				{
 					return null;
 				}
-				return new Result(ratio(xp, xpFor(target)), level + " / " + target, toGo(xpFor(target) - xp, " XP to go"), level >= target);
+				return new Result(ratio(xp, xpFor(target)), level + " / " + target, toGo(xpFor(target) - xp, " XP left"), level >= target);
 			}
 			case "skill_xp":
 			{
@@ -243,7 +243,7 @@ final class GoalProgress
 				{
 					return null;
 				}
-				return new Result(ratio(xp, target), compact(xp) + " / " + compact(target), toGo(target - xp, " XP to go"), xp >= target);
+				return new Result(ratio(xp, target), compact(xp) + " / " + compact(target), toGo(target - xp, " XP left"), xp >= target);
 			}
 			case "base_level":
 			{
@@ -267,7 +267,7 @@ final class GoalProgress
 						xpLeft += Math.max(0, xpFor(target) - xp);
 					}
 				}
-				String hint = below == 0 ? "" : below + (below == 1 ? " skill" : " skills") + " below " + target + ", " + fmt(xpLeft) + " XP to go";
+				String hint = below == 0 ? "" : below + (below == 1 ? " skill" : " skills") + " below " + target + "  ·  " + fmt(xpLeft) + " XP left";
 				return new Result(sum / f.levels.size(), "Lowest " + lowest, hint, lowest >= target);
 			}
 			case "kc":
@@ -279,7 +279,7 @@ final class GoalProgress
 					return null;
 				}
 				double count = Math.max(seen, g.current);
-				return new Result(ratio(count, target), fmt(count) + " / " + fmt(target), toGo(target - count, " more kills"), count >= target);
+				return new Result(ratio(count, target), fmt(count) + " / " + fmt(target), toGo(target - count, " kills left"), count >= target);
 			}
 			case "clog_item":
 			{

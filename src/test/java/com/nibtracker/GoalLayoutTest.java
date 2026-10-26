@@ -112,4 +112,25 @@ public class GoalLayoutTest
 
 		assertTrue(GoalLayout.favourites(l.completed, Collections.emptyMap()).isEmpty());
 	}
+
+	@Test
+	public void overviewOrderDefaultsAndKeepsSavedOrder()
+	{
+		assertEquals(GoalLayout.OVERVIEW_ORDER, GoalLayout.overviewOrder(""));
+		assertEquals("Farming", GoalLayout.overviewOrder("").get(0));
+		// Saved names first, unknown and repeated ones dropped, the rest after in the default order.
+		List<String> o = GoalLayout.overviewOrder("Skills, Nonsense,Quests,Skills");
+		assertEquals(Arrays.asList("Skills", "Quests", "Farming", "Daily tasks"), o.subList(0, 4));
+		assertEquals(GoalLayout.OVERVIEW_ORDER.size(), o.size());
+	}
+
+	@Test
+	public void movingASectionLandsWhereItIsDropped()
+	{
+		List<String> o = Arrays.asList("A", "B", "C", "D");
+		assertEquals(Arrays.asList("B", "C", "A", "D"), GoalLayout.move(o, "A", "C"));
+		assertEquals(Arrays.asList("A", "D", "B", "C"), GoalLayout.move(o, "D", "B"));
+		assertEquals(o, GoalLayout.move(o, "B", "B"));
+		assertEquals(o, GoalLayout.move(o, "B", "Z"));
+	}
 }

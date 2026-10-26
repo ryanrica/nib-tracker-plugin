@@ -111,6 +111,8 @@ class GoalTracker
 	/* Daily tasks and farm timers from the server; tasks ticked off here (id -> when next due) until the server has them. */
 	private List<Routines.Daily> dailies = Collections.emptyList();
 	private List<Routines.Patch> feedFarm = Collections.emptyList();
+	/* The one run over every kind of patch, stop by stop, with each stop's teleports (see Routines.Stop). */
+	private List<Routines.Stop> feedRoute = Collections.emptyList();
 	/* The patches shown: worked out here from Time Tracking, with the feed's travel and run order (see farmRows). */
 	private List<Routines.Patch> farm = Collections.emptyList();
 	private PatchPredictor predictor;
@@ -176,6 +178,8 @@ class GoalTracker
 		panel.onRegion(this::toggleRegion);
 		panel.onRegionsSet(this::setHiddenRegions);
 		panel.onFavouritesSet(this::setFavourites);
+		panel.onOverviewOrder(this::setOverviewOrder);
+		panel.onHideTip(() -> configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.OVERVIEW_TIP_HIDDEN, true));
 		if (predictor == null)
 		{
 			predictor = PatchPredictor.load(gson); // the tables in the jar, read once and off the client thread
@@ -210,6 +214,13 @@ class GoalTracker
 		Map<String, Set<String>> favourites = Favourites.parse(config.favourites());
 		Favourites.setAll(favourites, tab, ids);
 		configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.FAVOURITES, Favourites.write(favourites));
+		dirty = true;
+	}
+
+	/** Swing thread. Saves Overview's section order after a heading is dragged or moved. */
+	void setOverviewOrder(List<String> order)
+	{
+		configManager.setConfiguration(NibTrackerConfig.GROUP, NibTrackerConfig.OVERVIEW_ORDER, String.join(",", order));
 		dirty = true;
 	}
 
@@ -307,6 +318,7 @@ class GoalTracker
 				checkDailies(false); // tasks claimed before the feed came count now, quietly
 			}
 			feedFarm = Routines.farm(settings.get("farm"));
+			feedRoute = Routines.route(settings.get("route"));
 			JsonElement aliases = settings.get("kcAliases");
 			if (aliases != null && aliases.isJsonObject())
 			{
@@ -427,7 +439,7 @@ class GoalTracker
 	/** A goal on the game screen, in the given box. */
 	private GoalOverlay.Entry goalEntry(GoalsPanel.Row r, String box)
 	{
-		// The detail line: what to do (a combat achievement's task) or what's left ("250,964 XP to go").
+		// The detail line: what to do (a combat achievement's task) or what's left ("250,964 XP left").
 		String detail = !r.info.isEmpty() ? r.info : r.hint;
 		return new GoalOverlay.Entry(box, overlayIcon(r), r.title, GoalProgress.shortText(r.detail, r.progress, false), detail,
 			r.progress, false, tooltip(r, r.info, r.travel));
@@ -494,8 +506,17 @@ class GoalTracker
 	 */
 	private GoalsPanel.Extras extras(long now, Set<String> pins, List<GoalOverlay.Entry> onScreen, List<GoalsPanel.Row> rows)
 	{
-		farm = farmRows(now);
+		// Teleports the player has excluded give way to each stop's next best, everywhere a patch's way there is shown.
+		List<String> skip = FarmRows.excluded(config.excludedTeleports());
+		farm = FarmRows.skipTeleports(farmRows(now), feedRoute, skip);
 		GoalsPanel.Extras x = new GoalsPanel.Extras();
+		x.favouritesByRun = config.farmFavouritesView() == NibTrackerConfig.FarmFavourites.RUN_ORDER;
+		x.overviewOrder.addAll(GoalLayout.overviewOrder(config.overviewOrder()));
+		x.overviewTipHidden = config.overviewTipHidden();
+		for (Routines.Stop s : feedRoute)
+		{
+			x.stops.put(s.stop, new GoalsPanel.StopView(s.stop, s.place, FarmRows.pick(s, skip)));
+		}
 		x.dailiesOn = config.dailiesPanel();
 		x.farmOn = config.farmingPanel();
 		x.dailiesPinned = pins.contains(DAILIES);
@@ -591,6 +612,7 @@ class GoalTracker
 				v.attention = p.needsAttention();
 				v.kindLabel = p.kindLabel;
 				v.order = p.order;
+				v.stop = p.stop;
 				v.travelCat = p.travelCat;
 				v.travelItem = p.travelItem;
 				if (r != null)
@@ -796,10 +818,12 @@ class GoalTracker
 		}
 		else if (DAILIES_BOX.equals(tab))
 		{
+			// Only the ones due, like a pinned task: done (or not due yet) they leave the screen until they're due again,
+			// and with none due the box goes too.
 			for (String id : favs)
 			{
 				Routines.Daily d = daily.get(id);
-				if (d != null)
+				if (d != null && dueAt.get(d.id) <= now)
 				{
 					out.add(dailyEntry(d, dueAt.get(d.id), now, box));
 				}

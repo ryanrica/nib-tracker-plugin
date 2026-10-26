@@ -1,6 +1,7 @@
 package com.nibtracker;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -187,5 +188,51 @@ final class GoalLayout
 	private static boolean favourite(GoalsPanel.Row r, Map<String, Set<String>> favs)
 	{
 		return favs.getOrDefault(r.category, Collections.emptySet()).contains(r.id);
+	}
+
+	/* Overview's sections, top to bottom, until the player drags them into their own order. Completed is always last. */
+	static final List<String> OVERVIEW_ORDER = Collections.unmodifiableList(Arrays.asList("Farming", "Daily tasks",
+		"Combat achievements", "Quests", "Collection log", "Skills", "Bosses", "Items", "Achievement diaries", "Other"));
+
+	/**
+	 * Overview's section order from the saved setting (names, comma separated): the saved ones it knows, in that order,
+	 * then any it doesn't mention in the default order, so a new section still shows.
+	 */
+	static List<String> overviewOrder(String saved)
+	{
+		List<String> out = new ArrayList<>();
+		for (String s : saved.split(","))
+		{
+			String t = s.trim();
+			if (OVERVIEW_ORDER.contains(t) && !out.contains(t))
+			{
+				out.add(t);
+			}
+		}
+		for (String t : OVERVIEW_ORDER)
+		{
+			if (!out.contains(t))
+			{
+				out.add(t);
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * The order with a section dropped onto another: moving down it lands after that one, moving up before it, so it ends
+	 * up where it was dropped either way.
+	 */
+	static List<String> move(List<String> order, String section, String onto)
+	{
+		List<String> out = new ArrayList<>(order);
+		int from = out.indexOf(section), to = out.indexOf(onto);
+		if (from < 0 || to < 0 || from == to)
+		{
+			return out;
+		}
+		out.remove(from);
+		out.add(to, section);
+		return out;
 	}
 }

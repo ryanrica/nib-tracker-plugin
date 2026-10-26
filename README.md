@@ -18,11 +18,12 @@ planner character it should sync into (or makes a new one).
 
 Click the **Nib Tracker goals** button (the Nib Tracker logo) on RuneLite's sidebar to see the goals you set in Nib
 Tracker for the character you're logged in on, grouped into skills, quests, bosses, collection log, items, achievement
-diaries and combat achievements (click a heading to fold it away). Each goal shows how far along it is, with a bar that
-goes from red to green, and what's left ("88,113 XP to go", "288 more kills").
+diaries and combat achievements (click a heading to fold it away). Each goal shows how far along it is, with a gold
+bar that turns green when it's done, and what's left ("88,113 XP left", "288 kills left"). Hover over a goal, or reach
+it with Tab, to see its ★ and ▣; Enter opens it and Shift+F10 opens its menu.
 
 Goals made of parts are folded into one row: "Base 80 in every skill" shows your overall progress and how many skills
-are done, and you open it to see each skill (the same for a quest cape and its quests). Long sections show the first
+are done, and "Show parts" in its row opens each skill under it (the same for a quest cape and its quests). Long sections show the first
 few goals with "Show more", and finished goals move to a Completed section at the bottom.
 
 A Slayer level or XP goal shows your current task under it: the monster, kills left and a bar for how much of the task
@@ -37,13 +38,21 @@ through Nib Tracker, so new plantings show up once the Nib Tracker site has caug
 The icons along the top of the panel switch between the **Overview** (everything) and one kind at a time: skills,
 quests, bosses, collection log, items, achievement diaries, combat achievements, daily tasks and farming. Each has its
 own filters: combat achievements and diaries by tier, quests by whether you've started them, daily tasks by due or done,
-and farming by kind of patch (herbs, trees, fruit trees, Hespori and every other kind you have a timer on). A kind shows
-as a run: the stops in the order Nib Tracker's farm run planner works out with your bank, each numbered, with the
-teleport to use there and its patches under it.
+and farming by kind of patch (herbs, trees, fruit trees, Hespori and every other kind you have a timer on), ready ones
+first, each saying where it is and the teleport to use. **Run order** lists your favourite patches as one farm run over
+every kind at once: a card per place, in the order Nib Tracker's farm run planner works out with your bank, with the
+teleport to use there and what's ready (a favourite Farming Guild contract sits at the bottom of the Farming Guild's
+card). Under **Goals** in the plugin settings, **Farming favourites** shows Overview's favourite patches in run order
+(the default) or by kind, and **Teleports to skip** (Book of the dead, say, when it's out of charges) makes each stop use
+its next best teleport instead.
+
+Overview's sections start as Farming, Daily tasks, Combat achievements, Quests, Collection log, Skills, then the rest.
+Drag a section's heading onto another to move it there, or right-click a heading for Move up, Move down and Reset order
+(a tip at the top of Overview says so until you hide it). Each heading has the same icon as its tab.
 
 To keep an eye on a goal while you play, right-click it in the panel and choose **Show on game screen**. Daily tasks,
 farming, or one kind of patch (just herbs, say) can go on screen the same way. The on-screen card shows each with its
-icon, name, value ("82/83", "2 ready"), a progress bar and a line on what's next (the XP to go, a combat achievement's
+icon, name, value ("82/83", "2 ready"), a progress bar and a line on what's next (the XP left, a combat achievement's
 task, the herb run's teleports in order); hover for everything. Choose **Compact** under **Goals** in the plugin settings
 for just icons and numbers. Finished goals, and daily tasks once they're all done, leave the screen by themselves, so you
 can leave it on. Hold Alt to move it, and pick the size in the settings too. Right-click again to take something off.

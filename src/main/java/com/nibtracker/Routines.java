@@ -73,6 +73,8 @@ final class Routines
 		String kindLabel = "";
 		String run = "";
 		int order;
+		/* Its stop in the one run over every kind of patch (see Stop), 0 when it has none. */
+		int stop;
 		String travelCat = "";
 		String travelItem = "";
 		/* empty, growing, ready, diseased, dead or unknown, from Nib Tracker; "growing" or "ready" when the feed has none. */
@@ -108,6 +110,63 @@ final class Routines
 		{
 			return region + "|" + name + "|" + kind;
 		}
+	}
+
+	/**
+	 * A stop in the one farm run over every kind of patch, as Nib Tracker's planner works it out with your bank: the
+	 * place (the Farming Guild's herb and trees are one stop) and the teleports you can use to get there, best first.
+	 */
+	static final class Stop
+	{
+		final int stop;
+		final String place;
+		final List<Tele> teles = new ArrayList<>();
+
+		Stop(int stop, String place)
+		{
+			this.stop = stop;
+			this.place = place;
+		}
+	}
+
+	/** A teleport: its name ("Ardougne cloak 2"), how to use it, its kind (ITEM, SPELLBOOK, FAIRY_RING...) and item. */
+	static final class Tele
+	{
+		final String travel;
+		final String how;
+		final String cat;
+		final String item;
+
+		Tele(String travel, String how, String cat, String item)
+		{
+			this.travel = travel;
+			this.how = how;
+			this.cat = cat;
+			this.item = item;
+		}
+	}
+
+	static List<Stop> route(JsonElement e)
+	{
+		List<Stop> out = new ArrayList<>();
+		for (JsonObject o : objects(e, 60))
+		{
+			int n = (int) num(o, "stop");
+			String place = str(o, "place");
+			if (n > 0 && !place.isEmpty())
+			{
+				Stop s = new Stop(n, place);
+				for (JsonObject t : objects(o.get("teles"), 6))
+				{
+					if (!str(t, "travel").isEmpty())
+					{
+						s.teles.add(new Tele(str(t, "travel"), str(t, "how"), str(t, "cat"), str(t, "item")));
+					}
+				}
+				out.add(s);
+			}
+		}
+		return out;
 	}
 
 	static List<Daily> dailies(JsonElement e)
@@ -149,6 +208,7 @@ final class Routines
 				p.kindLabel = str(o, "kindLabel").isEmpty() ? p.type : str(o, "kindLabel");
 				p.run = str(o, "run");
 				p.order = (int) num(o, "order");
+				p.stop = (int) num(o, "stop");
 				p.travelCat = str(o, "travelCat");
 				p.travelItem = str(o, "travelItem");
 				String state = str(o, "state");

@@ -4,7 +4,9 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
+import java.awt.GradientPaint;
 import java.awt.Graphics2D;
+import java.awt.Paint;
 import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
@@ -15,6 +17,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
@@ -25,6 +28,8 @@ import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.ComponentConstants;
 import net.runelite.client.ui.overlay.tooltip.Tooltip;
 import net.runelite.client.ui.overlay.tooltip.TooltipManager;
+import net.runelite.client.util.AsyncBufferedImage;
+import net.runelite.client.util.ImageUtil;
 
 /**
  * What the player chose to show on the game screen (▣ in the Goals panel): goals, daily tasks, patches, the farming
@@ -88,7 +93,6 @@ class GoalOverlay extends Overlay
 	private static final int BOX_GAP = 6;
 
 	private static final Color READY = new Color(0x3F, 0xC2, 0x5F);
-	private static final Color WAITING = new Color(0xFF, 0x98, 0x1F);
 	private static final Color TITLE = new Color(0xF2, 0xEF, 0xE6);
 	private static final Color DETAIL = new Color(0xB4, 0xB0, 0xA4);
 	private static final Color HEADING = new Color(0xD8, 0xB6, 0x6A);
@@ -100,6 +104,9 @@ class GoalOverlay extends Overlay
 	private final TooltipManager tooltips;
 	private final NibTrackerConfig config;
 	private volatile List<Box> boxes = Collections.emptyList();
+	/* Each icon resized once to the size it's drawn at, smoothly, rather than stretched as each frame is drawn (which
+	   blurred the pixel art). Emptied when the entries change, and again when an item's picture finishes loading. */
+	private final Map<String, BufferedImage> sized = new ConcurrentHashMap<>();
 
 	@Inject
 	GoalOverlay(NibTrackerPlugin plugin, Client client, TooltipManager tooltips, NibTrackerConfig config)
@@ -114,6 +121,14 @@ class GoalOverlay extends Overlay
 	/** Any thread. Groups the entries into boxes here, once per change, so render only draws. */
 	void set(List<Entry> entries)
 	{
+		sized.clear();
+		for (Entry e : entries)
+		{
+			if (e.icon instanceof AsyncBufferedImage)
+			{
+				((AsyncBufferedImage) e.icon).onLoaded(sized::clear);
+			}
+		}
 		List<Box> out = new ArrayList<>();
 		for (Map.Entry<String, List<Entry>> b : boxes(entries))
 		{
@@ -160,7 +175,6 @@ class GoalOverlay extends Overlay
 		{
 			return null;
 		}
-		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 		int size = config.overlaySize().px;
 		boolean compact = config.overlayStyle() == NibTrackerConfig.OverlayStyle.COMPACT;
 		// The boxes stacked one under the other, in one overlay, so Alt-drag moves them together.
@@ -214,6 +228,9 @@ class GoalOverlay extends Overlay
 		{
 			g.setFont(smallFont);
 			drawHeading(g, sm, box.heading, pad, y0 + pad + sm.getAscent(), width - 2 * pad);
+			// A hairline under the title, as the panel's section headings have.
+			g.setColor(DIVIDER);
+			g.drawLine(pad, y0 + pad + headH - 3, width - pad, y0 + pad + headH - 3);
 		}
 
 		Point mouse = mousePoint();
@@ -247,10 +264,7 @@ class GoalOverlay extends Overlay
 			}
 			if (e.progress >= 0 || e.ready)
 			{
-				g.setColor(TRACK);
-				g.fillRect(textX, cy, textW, bar);
-				g.setColor(valueColour(e));
-				g.fillRect(textX, cy, (int) Math.round(textW * (e.progress < 0 ? 1 : Math.min(1, e.progress))), bar);
+				drawBar(g, e, textX, cy, textW, bar);
 				cy += bar + 3;
 			}
 			if (!e.detail.isEmpty())
@@ -277,7 +291,7 @@ class GoalOverlay extends Overlay
 			FontMetrics sm = g.getFontMetrics(smallFont);
 			int h = sm.getAscent() + 5, w = headingWidth(sm, box.heading) + 8;
 			g.setColor(ComponentConstants.STANDARD_BACKGROUND_COLOR);
-			g.fillRect(0, y, w, h);
+			g.fillRoundRect(0, y, w, h, 6, 6);
 			g.setFont(smallFont);
 			drawHeading(g, sm, box.heading, 4, y + 2 + sm.getAscent(), w - 8);
 			width = w;
@@ -292,18 +306,15 @@ class GoalOverlay extends Overlay
 			int rowW = size + (textW > 0 ? 3 + textW + 4 : 0);
 			int inner = size - bar - 2;
 			g.setColor(ComponentConstants.STANDARD_BACKGROUND_COLOR);
-			g.fillRect(0, y, rowW, size);
+			g.fillRoundRect(0, y, rowW, size, 6, 6);
 			drawIcon(g, e.icon, (size - inner) / 2, y + 1, inner);
 			if (textW > 0)
 			{
-				shadowed(g, value, size + 3, y + 1 + (inner + fm.getAscent() - fm.getDescent()) / 2, e.ready ? READY : Color.WHITE);
+				shadowed(g, value, size + 3, y + 1 + (inner + fm.getAscent() - fm.getDescent()) / 2, valueColour(e));
 			}
 			if (e.progress >= 0 || e.ready)
 			{
-				g.setColor(TRACK);
-				g.fillRect(2, y + size - bar - 1, rowW - 4, bar);
-				g.setColor(valueColour(e));
-				g.fillRect(2, y + size - bar - 1, (int) Math.round((rowW - 4) * (e.progress < 0 ? 1 : Math.min(1, e.progress))), bar);
+				drawBar(g, e, 3, y + size - bar - 2, rowW - 6, bar);
 			}
 			hover(e, mouse, at, new Rectangle(0, y, rowW, size));
 			width = Math.max(width, rowW);
@@ -312,9 +323,31 @@ class GoalOverlay extends Overlay
 		return new Dimension(width, y - 3 - y0);
 	}
 
+	/** Green when it's ready, light for a measured value, gold for something waiting on you (a yes/no goal, a timer). */
 	private static Color valueColour(Entry e)
 	{
-		return e.ready ? READY : e.progress >= 0 ? GoalsPanel.colour(e.progress).brighter() : WAITING;
+		return e.ready ? READY : e.progress >= 0 ? TITLE : GoalsPanel.GOLD;
+	}
+
+	/**
+	 * A slim rounded bar, as the panel draws it: a dark track, then gold deepening to bright gold as it fills, or green
+	 * when ready.
+	 */
+	private static void drawBar(Graphics2D g, Entry e, int x, int y, int w, int h)
+	{
+		Object aa = g.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		g.setColor(TRACK);
+		g.fillRoundRect(x, y, w, h, h, h);
+		int fill = (int) Math.round(w * (e.progress < 0 ? 1 : Math.min(1, e.progress)));
+		if (fill > 0)
+		{
+			Paint before = g.getPaint();
+			g.setPaint(e.ready ? READY : new GradientPaint(x, 0, GoalsPanel.GOLD_DEEP, x + w, 0, GoalsPanel.GOLD));
+			g.fillRoundRect(x, y, Math.max(fill, h), h, h, h);
+			g.setPaint(before);
+		}
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, aa);
 	}
 
 	/* The RuneScape fonts have no ★, so a favourites title gets a drawn star in its place. */
@@ -352,15 +385,17 @@ class GoalOverlay extends Overlay
 		return p;
 	}
 
-	private static void drawIcon(Graphics2D g, BufferedImage img, int x, int y, int box)
+	private void drawIcon(Graphics2D g, BufferedImage img, int x, int y, int box)
 	{
 		if (img == null || img.getWidth() <= 0)
 		{
 			return;
 		}
 		double s = Math.min((double) box / img.getWidth(), (double) box / img.getHeight());
-		int w = (int) Math.round(img.getWidth() * s), h = (int) Math.round(img.getHeight() * s);
-		g.drawImage(img, x + (box - w) / 2, y + (box - h) / 2, w, h, null);
+		int w = Math.max(1, (int) Math.round(img.getWidth() * s)), h = Math.max(1, (int) Math.round(img.getHeight() * s));
+		BufferedImage fit = w == img.getWidth() && h == img.getHeight() ? img
+			: sized.computeIfAbsent(System.identityHashCode(img) + ":" + w + "x" + h, k -> ImageUtil.resizeImage(img, w, h));
+		g.drawImage(fit, x + (box - w) / 2, y + (box - h) / 2, null);
 	}
 
 	private static void shadowed(Graphics2D g, String text, int x, int y, Color c)

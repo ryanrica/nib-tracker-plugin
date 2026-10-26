@@ -152,4 +152,48 @@ public class FarmRowsTest
 		assertFalse(FarmRows.anyGrowing(Arrays.asList(patch("", "empty", 0), patch("Torstol", "dead", 0))));
 		assertEquals(0, FarmRows.readyShare(Arrays.asList(patch("", "empty", 0)), NOW), 0.0001);
 	}
+
+	@Test
+	public void excludedTeleportsAreParsedAndMatchedInAnyCase()
+	{
+		List<String> skip = FarmRows.excluded(" Book of the dead , ,Ectophial\n");
+		assertEquals(Arrays.asList("book of the dead", "ectophial"), skip);
+		assertTrue(FarmRows.excluded("Book of the Dead (Kourend)", skip));
+		assertFalse(FarmRows.excluded("Camelot Teleport", skip));
+		assertFalse(FarmRows.excluded("Camelot Teleport", Collections.emptyList()));
+		// However it is written: capitals, extra spaces, apostrophes.
+		assertTrue(FarmRows.excluded("Xeric’s talisman", FarmRows.excluded("XERICS   Talisman")));
+		assertTrue(FarmRows.excluded("Book of the dead", FarmRows.excluded("book-of-the-DEAD")));
+	}
+
+	@Test
+	public void aStopUsesItsBestTeleportNotExcluded()
+	{
+		Routines.Stop s = new Routines.Stop(3, "Hosidius");
+		s.teles.add(new Routines.Tele("Book of the dead", "Rub it", "ITEM", "Book of the dead"));
+		s.teles.add(new Routines.Tele("Xeric's talisman", "Rub it", "ITEM", "Xeric's talisman"));
+		assertEquals("Book of the dead", FarmRows.pick(s, Collections.emptyList()).travel);
+		assertEquals("Xeric's talisman", FarmRows.pick(s, FarmRows.excluded("book of the dead")).travel);
+		assertEquals(null, FarmRows.pick(s, FarmRows.excluded("book of the dead, xeric")));
+	}
+
+	@Test
+	public void excludedTeleportsGiveWayToTheStopsNextBest()
+	{
+		Routines.Stop s = new Routines.Stop(1, "Catherby");
+		s.teles.add(new Routines.Tele("Camelot Teleport", "Cast it", "SPELLBOOK", ""));
+		s.teles.add(new Routines.Tele("Catherby tablet", "Break it", "ITEM", "Catherby teleport"));
+		Routines.Patch p = patch("Ranarr", "growing", NOW + MIN);
+		p.stop = 1;
+		p.travel = "Camelot Teleport";
+		Routines.Patch other = patch("Guam", "growing", NOW + MIN);
+		other.travel = "Camelot Teleport";
+		List<Routines.Patch> out = FarmRows.skipTeleports(Arrays.asList(p, other), Collections.singletonList(s), FarmRows.excluded("camelot"));
+		assertEquals("Catherby tablet", out.get(0).travel);
+		assertEquals("ITEM", out.get(0).travelCat);
+		assertEquals("Camelot Teleport", p.travel);
+		// No stop to fall back on: it keeps what it had.
+		assertEquals("Camelot Teleport", out.get(1).travel);
+		assertTrue(FarmRows.skipTeleports(Arrays.asList(p), Collections.singletonList(s), Collections.emptyList()).get(0) == p); // nothing excluded: as given
+	}
 }

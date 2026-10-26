@@ -18,7 +18,7 @@ final class FarmGroups
 		"tree", "hardwood", "redwood")));
 	static final String CONTRACT_ID = "farming:contract";
 
-	private static final String GUILD = "Farming Guild";
+	static final String GUILD = "Farming Guild";
 	private static final Map<Integer, Contract> CONTRACTS = new HashMap<>();
 
 	static final class Contract

@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -276,6 +277,7 @@ final class FarmRows
 				p.travelCat = f.travelCat;
 				p.travelItem = f.travelItem;
 				p.order = f.order;
+				p.stop = f.stop;
 			}
 			out.add(p);
 		}
@@ -285,6 +287,77 @@ final class FarmRows
 			{
 				out.add(f);
 			}
+		}
+		return out;
+	}
+
+	/** The teleports the player won't use (Book of the dead when it's out of charges), from the setting: one per line or comma. */
+	static List<String> excluded(String setting)
+	{
+		List<String> out = new ArrayList<>();
+		for (String s : setting.split("[,\n]"))
+		{
+			String t = loose(s);
+			if (!t.isEmpty())
+			{
+				out.add(t);
+			}
+		}
+		return out;
+	}
+
+	/** Whether a teleport is one the player won't use: its name has one of theirs in it, however either is written. */
+	static boolean excluded(String travel, List<String> excluded)
+	{
+		String t = loose(travel);
+		return excluded.stream().anyMatch(t::contains);
+	}
+
+	/** A name as typed loosely: any case, apostrophes dropped, anything else but letters and digits a single space. */
+	private static String loose(String s)
+	{
+		return s.toLowerCase(Locale.ROOT).replaceAll("['\u2019]", "").replaceAll("[^a-z0-9]+", " ").trim();
+	}
+
+	/** A stop's best teleport the player will use, or null when they've excluded every one there is. */
+	static Routines.Tele pick(Routines.Stop s, List<String> excluded)
+	{
+		for (Routines.Tele t : s.teles)
+		{
+			if (!excluded(t.travel, excluded))
+			{
+				return t;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The patches with any excluded teleport swapped for their stop's best one the player will use (copies; the rest
+	 * as they were). A patch with no stop, or whose stop has nothing left, keeps what it had.
+	 */
+	static List<Routines.Patch> skipTeleports(List<Routines.Patch> farm, List<Routines.Stop> route, List<String> excluded)
+	{
+		if (excluded.isEmpty())
+		{
+			return farm;
+		}
+		Map<Integer, Routines.Stop> stops = new HashMap<>();
+		route.forEach(s -> stops.put(s.stop, s));
+		List<Routines.Patch> out = new ArrayList<>();
+		for (Routines.Patch p : farm)
+		{
+			Routines.Stop s = stops.get(p.stop);
+			Routines.Tele t = s == null || p.travel.isEmpty() || !excluded(p.travel, excluded) ? null : pick(s, excluded);
+			if (t != null)
+			{
+				p = copy(p);
+				p.travel = t.travel;
+				p.travelHow = t.how;
+				p.travelCat = t.cat;
+				p.travelItem = t.item;
+			}
+			out.add(p);
 		}
 		return out;
 	}
@@ -299,6 +372,7 @@ final class FarmRows
 		c.kindLabel = p.kindLabel;
 		c.run = p.run;
 		c.order = p.order;
+		c.stop = p.stop;
 		c.travelCat = p.travelCat;
 		c.travelItem = p.travelItem;
 		c.state = p.state;
