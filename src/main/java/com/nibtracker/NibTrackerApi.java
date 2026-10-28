@@ -26,7 +26,7 @@ import okhttp3.ResponseBody;
 class NibTrackerApi
 {
 	/* Must match runelite-plugin.properties (NibTrackerApiTest checks), so the server can tell releases apart. */
-	static final String VERSION = "0.5.0";
+	static final String VERSION = "0.6.0";
 
 	/* The Supabase project address and its publishable key. Both are public by design (they're in the web app too);
 	   the server checks the plugin key on every call. */
