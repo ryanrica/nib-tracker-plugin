@@ -4,17 +4,24 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.IntUnaryOperator;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import net.runelite.api.Client;
+import net.runelite.api.EnumComposition;
+import net.runelite.api.EnumID;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
+import net.runelite.api.ScriptID;
 import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.events.VarbitChanged;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
 
 /**
- * Bank, seed vault, worn equipment and inventory as snapshots. Each is sent a little after it stops changing, and only
+ * Bank, seed vault, potion storage, worn equipment and inventory as snapshots. Each is sent a little after it stops changing, and only
  * when it differs from the last one sent.
  */
 @Singleton
@@ -35,14 +42,20 @@ class ContainerTracker
 	}
 
 	private static final Map<Integer, Watch> WATCH = new HashMap<>();
+	// Potion storage is not an item container: it is read from the client when due, as RuneLite's bank tags do.
+	private static final int POTION_STORAGE = -1;
 
 	static
 	{
 		WATCH.put(InventoryID.BANK, new Watch("snapshot_bank", "bank", 10));
 		WATCH.put(InventoryID.SEED_VAULT, new Watch("snapshot_seed_vault", "bank", 10));
+		WATCH.put(POTION_STORAGE, new Watch("snapshot_potion_storage", "bank", 10));
 		WATCH.put(InventoryID.WORN, new Watch("snapshot_equipment", "gear", 5));
 		WATCH.put(InventoryID.INV, new Watch("snapshot_inventory", "gear", 100));
 	}
+
+	@Inject
+	private Client client;
 
 	@Inject
 	private ItemManager itemManager;
@@ -77,7 +90,27 @@ class ContainerTracker
 			return;
 		}
 		pending.put(e.getContainerId(), items(e.getItemContainer()));
-		dueAt.putIfAbsent(e.getContainerId(), ticks + w.waitTicks);
+		schedule(e.getContainerId());
+		if (e.getContainerId() == InventoryID.BANK)
+		{
+			schedule(POTION_STORAGE);
+		}
+	}
+
+	/** Storing or taking out potions changes varps, not the bank. */
+	@Subscribe
+	public void onVarbitChanged(VarbitChanged e)
+	{
+		if (sink != null && sink.active() && sink.allowed("bank", config.sendBank())
+			&& client.getWidget(InterfaceID.Bankmain.UNIVERSE) != null)
+		{
+			schedule(POTION_STORAGE);
+		}
+	}
+
+	private void schedule(int id)
+	{
+		dueAt.putIfAbsent(id, ticks + WATCH.get(id).waitTicks);
 	}
 
 	void tick()
@@ -93,7 +126,7 @@ class ContainerTracker
 				return false;
 			}
 			int id = due.getKey();
-			JsonArray items = pending.remove(id);
+			JsonArray items = id == POTION_STORAGE ? potions() : pending.remove(id);
 			if (items != null && !items.equals(lastSent.get(id)) && sink.active())
 			{
 				lastSent.put(id, items);
@@ -116,9 +149,9 @@ class ContainerTracker
 		for (int slot = 0; slot < all.length; slot++)
 		{
 			Item it = all[slot];
-			if (it.getId() <= 0 || it.getQuantity() <= 0)
+			if (!owned(it, i -> itemManager.getItemComposition(i).getPlaceholderTemplateId()))
 			{
-				continue; // empty slots and bank placeholders
+				continue;
 			}
 			int id = itemManager.canonicalize(it.getId());
 			JsonObject o = new JsonObject();
@@ -129,5 +162,43 @@ class ContainerTracker
 			out.add(o);
 		}
 		return out;
+	}
+
+	/** Potion storage as {id, name, quantity}: the full-dose potion, and how many of them its doses make, rounded up. */
+	private JsonArray potions()
+	{
+		JsonArray out = new JsonArray();
+		for (int list : new int[]{EnumID.POTIONSTORE_POTIONS, EnumID.POTIONSTORE_UNFINISHED_POTIONS})
+		{
+			for (int potion : client.getEnum(list).getIntVals())
+			{
+				client.runScript(ScriptID.POTIONSTORE_DOSES, potion);
+				int doses = client.getIntStack()[0];
+				if (doses <= 0)
+				{
+					continue;
+				}
+				// The potion's enum maps dose -> item; the highest dose it has is the full potion.
+				EnumComposition byDose = client.getEnum(potion);
+				int max = 4;
+				while (max > 1 && byDose.getIntValue(max) <= 0)
+				{
+					max--;
+				}
+				int id = byDose.getIntValue(max);
+				JsonObject o = new JsonObject();
+				o.addProperty("id", id);
+				o.addProperty("name", itemManager.getItemComposition(id).getName());
+				o.addProperty("quantity", (doses + max - 1) / max);
+				out.add(o);
+			}
+		}
+		return out;
+	}
+
+	/** A real item: not an empty slot, and not a bank placeholder (shown as 0), so canonicalize can't make it owned. */
+	static boolean owned(Item it, IntUnaryOperator placeholderTemplate)
+	{
+		return it.getId() > 0 && it.getQuantity() > 0 && placeholderTemplate.applyAsInt(it.getId()) == -1;
 	}
 }

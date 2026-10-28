@@ -376,7 +376,7 @@ class GoalTracker
 		{
 			for (Item it : c.getItems())
 			{
-				if (it.getId() > 0 && it.getQuantity() > 0)
+				if (ContainerTracker.owned(it, i -> itemManager.getItemComposition(i).getPlaceholderTemplateId()))
 				{
 					counts.merge(itemManager.canonicalize(it.getId()), (long) it.getQuantity(), Long::sum);
 				}
