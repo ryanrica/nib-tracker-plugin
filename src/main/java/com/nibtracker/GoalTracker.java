@@ -417,7 +417,8 @@ class GoalTracker
 			refreshPanel(Collections.emptyList(), new GoalsPanel.Extras());
 			return;
 		}
-		List<GoalsPanel.Row> rows = goals.isEmpty() ? new ArrayList<>() : goalRows();
+		// Also with no goals: the Slayer task row still shows in the Bosses tab.
+		List<GoalsPanel.Row> rows = goalRows();
 		Set<String> pins = pins();
 		List<GoalOverlay.Entry> onScreen = new ArrayList<>();
 		for (GoalsPanel.Row r : rows)
@@ -1289,8 +1290,8 @@ class GoalTracker
 	}
 
 	/**
-	 * The current Slayer task, under the first open Slayer level or XP goal: its name, kills left and a bar for kills
-	 * done out of the task. Null when there's no such goal or no task.
+	 * The current Slayer task, under the first open Slayer level or XP goal (if any) and at the top of the Bosses tab:
+	 * its name, kills left and a bar for kills done out of the task. Null when there's no task.
 	 */
 	private GoalsPanel.Row slayerTaskRow(Map<String, GoalProgress.Result> results)
 	{
@@ -1308,16 +1309,13 @@ class GoalTracker
 				break;
 			}
 		}
-		if (goal == null)
-		{
-			return null;
-		}
 		int left = t.get("remaining").getAsInt(), amount = Math.max(left, t.has("amount") ? t.get("amount").getAsInt() : left);
 		String where = t.has("location") ? t.get("location").getAsString() : "";
 		GoalsPanel.Row row = new GoalsPanel.Row(SLAYER_TASK, "Skills", "Task: " + t.get("name").getAsString(),
 			left + " left", (amount - left) + " of " + amount + " killed" + (where.isEmpty() ? "" : "  ·  " + where),
 			amount > 0 ? (double) (amount - left) / amount : -1, false, 0, null, null, ItemID.SLAYER_GEM, NibTrackerApi.SITE + "/#slayer");
-		row.parent = goal.id;
+		// With no Slayer goal it shows only in the Bosses tab (an extra without its goal is left out of the goals).
+		row.parent = goal == null ? "" : goal.id;
 		row.extra = true;
 		return row;
 	}
@@ -1560,7 +1558,7 @@ class GoalTracker
 		{
 			message = "Nib Tracker's server isn't sending goals yet. It needs updating (plugin.sql).";
 		}
-		else if (rows.isEmpty())
+		else if (rows.stream().allMatch(r -> r.extra))
 		{
 			message = "No open goals. Add some in Nib Tracker, or open it once with this character selected so it sends them.";
 		}

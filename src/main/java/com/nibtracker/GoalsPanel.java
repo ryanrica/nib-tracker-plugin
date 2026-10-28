@@ -285,6 +285,7 @@ class GoalsPanel extends PluginPanel
 	private final JLabel heading = new JLabel("Goals");
 	private final JLabel percent = new JLabel();
 	private final JLabel summary = new JLabel();
+	private final JLabel openSite = new JLabel("Open Nib Tracker");
 	private final Bar overall = new Bar(3);
 	/* The picked view's name under the tabs, as the tabs are icons. */
 	private final JLabel viewName = new JLabel();
@@ -318,6 +319,11 @@ class GoalsPanel extends PluginPanel
 		summary.setForeground(MUTED);
 		viewName.setFont(TITLE);
 		viewName.setForeground(INK);
+		openSite.setFont(BODY);
+		openSite.setForeground(GOLD);
+		openSite.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		openSite.setToolTipText(NibTrackerApi.SITE);
+		onClick(openSite, () -> LinkBrowser.browse(NibTrackerApi.SITE));
 
 		nameRow.setOpaque(false);
 		nameRow.add(heading, BorderLayout.CENTER);
@@ -349,25 +355,12 @@ class GoalsPanel extends PluginPanel
 		overall.set(avg, total > 0 && done == total);
 		overall.setVisible(total > 0);
 
-		// The views there's something to show in: Overview, each kind of goal, Daily tasks, Farming.
+		// Every tab always shows, so they don't move about as goals come and go; an empty one says so.
 		List<String> views = new ArrayList<>();
 		views.add(OVERVIEW);
-		for (String c : GoalProgress.CATEGORIES)
-		{
-			if (layout.sections.containsKey(c) || layout.completed.stream().anyMatch(g -> c.equals(g.main.category)))
-			{
-				views.add(c);
-			}
-		}
-		if (extras.dailiesOn && !extras.dailies.isEmpty())
-		{
-			views.add(DAILIES);
-		}
-		// Farm data or a contract: the contract row works with the website closed.
-		if (extras.farmOn && (!extras.allRegions.isEmpty() || extras.contract != null))
-		{
-			views.add(FARMING);
-		}
+		views.addAll(Arrays.asList(GoalProgress.CATEGORIES));
+		views.add(DAILIES);
+		views.add(FARMING);
 		views.sort(Comparator.comparingInt(v -> TAB_ORDER.indexOf(v) < 0 ? TAB_ORDER.size() : TAB_ORDER.indexOf(v)));
 		if (!views.contains(view))
 		{
@@ -375,7 +368,6 @@ class GoalsPanel extends PluginPanel
 		}
 		tabs(views);
 		viewName.setText(view);
-		viewName.setVisible(views.size() > 1);
 
 		list.removeAll();
 		if (OVERVIEW.equals(view))
@@ -401,16 +393,31 @@ class GoalsPanel extends PluginPanel
 				list.add(reorderTip(), 0);
 			}
 			any |= picksSection(COMPLETED, GoalLayout.favourites(layout.completed, extras.favourites));
-			// The hint shows once there are tabs to star things in.
-			if (!any && views.size() > 1)
+			if (!any)
 			{
 				list.add(note("Star things in any tab to see them here."));
 			}
 		}
 		else if (DAILIES.equals(view))
 		{
-			filters(Arrays.asList(ALL, "Due", "Done"));
-			dailies(extras, false);
+			if (!extras.dailiesOn || extras.dailies.isEmpty())
+			{
+				filters.setVisible(false);
+				list.add(note(extras.dailiesOn ? "No daily tasks yet. Switch some on in Nib Tracker."
+					: "Turn on Daily tasks in the panel in this plugin's settings."));
+			}
+			else
+			{
+				filters(Arrays.asList(ALL, "Due", "Done"));
+				dailies(extras, false);
+			}
+		}
+		else if (FARMING.equals(view) && (!extras.farmOn || extras.allRegions.isEmpty() && extras.contract == null))
+		{
+			// Farm data or a contract: the contract row works with the website closed.
+			filters.setVisible(false);
+			list.add(note(extras.farmOn ? "No farm timers yet. They come from RuneLite's Time Tracking plugin."
+				: "Turn on Farming in the panel in this plugin's settings."));
 		}
 		else if (FARMING.equals(view))
 		{
@@ -475,6 +482,7 @@ class GoalsPanel extends PluginPanel
 	{
 		top.removeAll();
 		top.add(nameRow);
+		top.add(openSite);
 		for (JComponent c : Arrays.asList(summary, overall, tabsHolder, viewName, filters, status))
 		{
 			if (c.isVisible())
@@ -755,6 +763,12 @@ class GoalsPanel extends PluginPanel
 		}
 		filters(tags);
 		String f = currentFilter();
+		// Bosses leads with the current Slayer task, whether or not a Slayer goal has it under it.
+		Row task = "Bosses".equals(category) ? lastRows.stream().filter(r -> GoalTracker.SLAYER_TASK.equals(r.id)).findFirst().orElse(null) : null;
+		if (task != null)
+		{
+			list.add(card(goalCard(task, task.progress, task.detail)));
+		}
 		// Favourites stay where they are here (★ on the row); Overview is where they're gathered.
 		for (GoalLayout.Group g : open)
 		{
@@ -779,7 +793,7 @@ class GoalsPanel extends PluginPanel
 				shownDone.forEach(this::group);
 			}
 		}
-		if (open.isEmpty() && shownDone.isEmpty())
+		if (open.isEmpty() && shownDone.isEmpty() && task == null)
 		{
 			list.add(note("Nothing here yet."));
 		}
