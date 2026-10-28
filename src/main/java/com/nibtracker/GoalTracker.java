@@ -1290,7 +1290,7 @@ class GoalTracker
 	}
 
 	/**
-	 * The current Slayer task, under the first open Slayer level or XP goal (else under a Slayer heading in Skills):
+	 * The current Slayer task, under the nearest open Slayer level or XP goal (else under a Slayer heading in Skills):
 	 * its name, kills left and a bar for kills done out of the task. Null when there's no task.
 	 */
 	private GoalsPanel.Row slayerTaskRow(Map<String, GoalProgress.Result> results)
@@ -1300,13 +1300,16 @@ class GoalTracker
 		{
 			return null;
 		}
+		// The open Slayer goal closest to done, so it sits under the one listed first (73 Slayer before 80 Slayer). Only a
+		// goal shown as its own row: under a part folded inside a main goal (Base 80) it would never be seen.
 		GoalProgress.Goal goal = null;
 		for (GoalProgress.Goal g : goals)
 		{
-			if (("skill_level".equals(g.type) || "skill_xp".equals(g.type)) && "slayer".equals(GoalProgress.skillKey(g.str("skill"))) && !results.get(g.id).done)
+			if (("skill_level".equals(g.type) || "skill_xp".equals(g.type)) && "slayer".equals(GoalProgress.skillKey(g.str("skill")))
+				&& g.parent.isEmpty() && !results.get(g.id).done
+				&& (goal == null || results.get(g.id).progress > results.get(goal.id).progress))
 			{
 				goal = g;
-				break;
 			}
 		}
 		int left = t.get("remaining").getAsInt(), amount = Math.max(left, t.has("amount") ? t.get("amount").getAsInt() : left);
