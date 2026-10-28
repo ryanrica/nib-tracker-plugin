@@ -2,8 +2,11 @@ package com.nibtracker;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.IntUnaryOperator;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -56,8 +59,13 @@ class ContainerTracker
 		WATCH.put(InventoryID.INV, new Watch("snapshot_inventory", "gear", 100));
 	}
 
-	/* Any other container the server lists under watch.containers (a looting bag, group storage...), with its id. */
+	/* Another container the server lists under watch.containers, with its id: only these, the player's own storage. A
+	   trade partner's offer, a shop or anyone else's items can never be asked for. */
 	private static final Watch SERVER_WATCH = new Watch("snapshot_container", "bank", 10);
+	static final Set<Integer> OWN_STORAGE = new HashSet<>(Arrays.asList(InventoryID.LOOTING_BAG, InventoryID.SEED_BOX,
+		InventoryID.TACKLE_BOX, InventoryID.HUNTSMANS_KIT, InventoryID.INV_GROUP_TEMP, InventoryID.SAILING_BOAT_1_CARGOHOLD,
+		InventoryID.SAILING_BOAT_2_CARGOHOLD, InventoryID.SAILING_BOAT_3_CARGOHOLD, InventoryID.SAILING_BOAT_4_CARGOHOLD,
+		InventoryID.SAILING_BOAT_5_CARGOHOLD));
 	private static final int[] BANK_TABS = {VarbitID.BANK_TAB_1, VarbitID.BANK_TAB_2, VarbitID.BANK_TAB_3, VarbitID.BANK_TAB_4,
 		VarbitID.BANK_TAB_5, VarbitID.BANK_TAB_6, VarbitID.BANK_TAB_7, VarbitID.BANK_TAB_8, VarbitID.BANK_TAB_9};
 
@@ -128,7 +136,7 @@ class ContainerTracker
 		{
 			return w;
 		}
-		return ProgressTracker.watchIds(sink.settings(), "containers", 65536, 50).contains(id) ? SERVER_WATCH : null;
+		return OWN_STORAGE.contains(id) && ProgressTracker.watchIds(sink.settings(), "containers", 65536, 50).contains(id) ? SERVER_WATCH : null;
 	}
 
 	void tick()

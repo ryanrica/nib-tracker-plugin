@@ -42,4 +42,14 @@ public class ServerWatchTest
 		assertEquals(3, ContainerTracker.bankTab(4, tabs));
 		assertEquals(0, ContainerTracker.bankTab(5, tabs)); // the main tab comes after them
 	}
+
+	@Test
+	public void theServerCanOnlyAskForThePlayersOwnStorage()
+	{
+		assertTrue(ContainerTracker.OWN_STORAGE.contains(net.runelite.api.gameval.InventoryID.LOOTING_BAG));
+		// A trade window (the player's offer, or the other player's at 90 + 32768) or a shop is never sent.
+		assertFalse(ContainerTracker.OWN_STORAGE.contains(net.runelite.api.gameval.InventoryID.TRADEOFFER));
+		assertFalse(ContainerTracker.OWN_STORAGE.contains(net.runelite.api.gameval.InventoryID.TRADEOFFER + 32768));
+		assertFalse(ContainerTracker.OWN_STORAGE.contains(net.runelite.api.gameval.InventoryID.SHIPYARD_SHOP));
+	}
 }
