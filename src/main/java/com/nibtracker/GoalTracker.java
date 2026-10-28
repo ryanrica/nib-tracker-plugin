@@ -417,7 +417,7 @@ class GoalTracker
 			refreshPanel(Collections.emptyList(), new GoalsPanel.Extras());
 			return;
 		}
-		// Also with no goals: the Slayer task row still shows in the Bosses tab.
+		// Also with no goals: the Slayer task row still shows in the Skills tab.
 		List<GoalsPanel.Row> rows = goalRows();
 		Set<String> pins = pins();
 		List<GoalOverlay.Entry> onScreen = new ArrayList<>();
@@ -1290,7 +1290,7 @@ class GoalTracker
 	}
 
 	/**
-	 * The current Slayer task, under the first open Slayer level or XP goal (if any) and at the top of the Bosses tab:
+	 * The current Slayer task, under the first open Slayer level or XP goal (else under a Slayer heading in Skills):
 	 * its name, kills left and a bar for kills done out of the task. Null when there's no task.
 	 */
 	private GoalsPanel.Row slayerTaskRow(Map<String, GoalProgress.Result> results)
@@ -1314,7 +1314,7 @@ class GoalTracker
 		GoalsPanel.Row row = new GoalsPanel.Row(SLAYER_TASK, "Skills", "Task: " + t.get("name").getAsString(),
 			left + " left", (amount - left) + " of " + amount + " killed" + (where.isEmpty() ? "" : "  ·  " + where),
 			amount > 0 ? (double) (amount - left) / amount : -1, false, 0, null, null, ItemID.SLAYER_GEM, NibTrackerApi.SITE + "/#slayer");
-		// With no Slayer goal it shows only in the Bosses tab (an extra without its goal is left out of the goals).
+		// With no Slayer goal the Skills tab shows it on its own (an extra without its goal is left out of the goals).
 		row.parent = goal == null ? "" : goal.id;
 		row.extra = true;
 		return row;

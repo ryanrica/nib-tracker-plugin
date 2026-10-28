@@ -355,10 +355,12 @@ class GoalsPanel extends PluginPanel
 		overall.set(avg, total > 0 && done == total);
 		overall.setVisible(total > 0);
 
-		// Every tab always shows, so they don't move about as goals come and go; an empty one says so.
+		// Every tab always shows, so they don't move about as goals come and go; an empty one says so. Bosses, Items and
+		// Other are left out for now (their goals still show in Overview when starred).
 		List<String> views = new ArrayList<>();
 		views.add(OVERVIEW);
 		views.addAll(Arrays.asList(GoalProgress.CATEGORIES));
+		views.removeAll(Arrays.asList("Bosses", "Items", "Other"));
 		views.add(DAILIES);
 		views.add(FARMING);
 		views.sort(Comparator.comparingInt(v -> TAB_ORDER.indexOf(v) < 0 ? TAB_ORDER.size() : TAB_ORDER.indexOf(v)));
@@ -763,18 +765,24 @@ class GoalsPanel extends PluginPanel
 		}
 		filters(tags);
 		String f = currentFilter();
-		// Bosses leads with the current Slayer task, whether or not a Slayer goal has it under it.
-		Row task = "Bosses".equals(category) ? lastRows.stream().filter(r -> GoalTracker.SLAYER_TASK.equals(r.id)).findFirst().orElse(null) : null;
-		if (task != null)
-		{
-			list.add(card(goalCard(task, task.progress, task.detail)));
-		}
 		// Favourites stay where they are here (★ on the row); Overview is where they're gathered.
 		for (GoalLayout.Group g : open)
 		{
 			if (ALL.equals(f) || f.equals(g.main.tag))
 			{
 				group(g);
+			}
+		}
+		// Skills: the current Slayer task, small, under a Slayer heading (a Slayer goal has it under itself instead).
+		Row task = "Skills".equals(category) ? lastRows.stream()
+			.filter(r -> GoalTracker.SLAYER_TASK.equals(r.id) && r.parent.isEmpty()).findFirst().orElse(null) : null;
+		if (task != null)
+		{
+			list.add(sectionHeader(GoalTracker.SLAYER_TASK, "Slayer", 1, icons.computeIfAbsent("heading:" + Skill.SLAYER.name(),
+				k -> new ImageIcon(fitTo(skillIcons.getSkillImage(Skill.SLAYER, false), 14)))));
+			if (!collapsed.contains(GoalTracker.SLAYER_TASK))
+			{
+				list.add(children(Collections.singletonList(goalCard(task, task.progress, task.detail))));
 			}
 		}
 		List<GoalLayout.Group> shownDone = new ArrayList<>();
