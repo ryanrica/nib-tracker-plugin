@@ -5,8 +5,13 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -24,6 +29,7 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import javax.swing.SwingUtilities;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.Item;
@@ -57,6 +63,7 @@ import net.runelite.http.api.item.ItemPrice;
  * completes. Progress is worked out by GoalProgress for the built-in goal types; for the rest the server's is shown.
  * Client thread unless noted.
  */
+@Slf4j
 @Singleton
 class GoalTracker
 {
@@ -140,6 +147,10 @@ class GoalTracker
 
 	private EventSink sink;
 	private int slayerSeen = -1;
+	/* Each Slayer task's picture (see taskIcon), read once. */
+	private Map<String, Integer> taskIcons;
+	/* The server's notice for the panel's status line, or empty. */
+	private String notice = "";
 	/* Icons for the on-screen goals, and item ids found by name, so each is looked up once. */
 	private final Map<String, BufferedImage> overlayIcons = new HashMap<>();
 	private final Map<String, Integer> itemIds = new HashMap<>();
@@ -332,6 +343,9 @@ class GoalTracker
 				}
 				facts.kcAliases = m;
 			}
+			JsonElement n = settings.get("notice");
+			notice = n != null && n.isJsonPrimitive() ? n.getAsString().trim() : "";
+			notice = notice.length() > 200 ? notice.substring(0, 200) : notice;
 			dirty = true;
 		});
 	}
@@ -376,7 +390,7 @@ class GoalTracker
 		{
 			for (Item it : c.getItems())
 			{
-				if (it.getId() > 0 && it.getQuantity() > 0)
+				if (ContainerTracker.owned(it, i -> itemManager.getItemComposition(i).getPlaceholderTemplateId()))
 				{
 					counts.merge(itemManager.canonicalize(it.getId()), (long) it.getQuantity(), Long::sum);
 				}
@@ -417,7 +431,8 @@ class GoalTracker
 			refreshPanel(Collections.emptyList(), new GoalsPanel.Extras());
 			return;
 		}
-		List<GoalsPanel.Row> rows = goals.isEmpty() ? new ArrayList<>() : goalRows();
+		// Also with no goals: the Slayer task row still shows in the Skills tab.
+		List<GoalsPanel.Row> rows = goalRows();
 		Set<String> pins = pins();
 		List<GoalOverlay.Entry> onScreen = new ArrayList<>();
 		for (GoalsPanel.Row r : rows)
@@ -472,7 +487,7 @@ class GoalTracker
 			}
 			rows.add(row(g, r, planner));
 		}
-		GoalsPanel.Row task = slayerTaskRow(results);
+		GoalsPanel.Row task = slayerTaskRow();
 		if (task != null)
 		{
 			rows.add(task);
@@ -1289,37 +1304,48 @@ class GoalTracker
 	}
 
 	/**
-	 * The current Slayer task, under the first open Slayer level or XP goal: its name, kills left and a bar for kills
-	 * done out of the task. Null when there's no such goal or no task.
+	 * The current Slayer task, its own row at the top of the Skills tab: its monster's picture, name, kills left, a bar
+	 * for kills done out of the task, and Konar's area. How to get there is left to Nib Tracker (the row links to its
+	 * Slayer page). Null when there's no task.
 	 */
-	private GoalsPanel.Row slayerTaskRow(Map<String, GoalProgress.Result> results)
+	private GoalsPanel.Row slayerTaskRow()
 	{
 		JsonObject t = slayer.current();
 		if (t == null || !t.has("name") || t.get("remaining").getAsInt() <= 0)
 		{
 			return null;
 		}
-		GoalProgress.Goal goal = null;
-		for (GoalProgress.Goal g : goals)
-		{
-			if (("skill_level".equals(g.type) || "skill_xp".equals(g.type)) && "slayer".equals(GoalProgress.skillKey(g.str("skill"))) && !results.get(g.id).done)
-			{
-				goal = g;
-				break;
-			}
-		}
-		if (goal == null)
-		{
-			return null;
-		}
+		String name = t.get("name").getAsString();
 		int left = t.get("remaining").getAsInt(), amount = Math.max(left, t.has("amount") ? t.get("amount").getAsInt() : left);
 		String where = t.has("location") ? t.get("location").getAsString() : "";
-		GoalsPanel.Row row = new GoalsPanel.Row(SLAYER_TASK, "Skills", "Task: " + t.get("name").getAsString(),
+		GoalsPanel.Row row = new GoalsPanel.Row(SLAYER_TASK, "Skills", "Task: " + name,
 			left + " left", (amount - left) + " of " + amount + " killed" + (where.isEmpty() ? "" : "  ·  " + where),
-			amount > 0 ? (double) (amount - left) / amount : -1, false, 0, null, null, ItemID.SLAYER_GEM, NibTrackerApi.SITE + "/#slayer");
-		row.parent = goal.id;
+			amount > 0 ? (double) (amount - left) / amount : -1, false, 0, null, null, taskIcon(name), NibTrackerApi.SITE + "/#slayer");
+		// Not a goal: left out of the goal count, and drawn by the Skills tab itself.
 		row.extra = true;
 		return row;
+	}
+
+	/**
+	 * The item picture RuneLite's Slayer plugin shows for a task (slayer_tasks.json is its Task list), else the
+	 * enchanted gem. Names are lower case without a leading "the" (the game says "Abyssal Sire", RuneLite "The ...").
+	 */
+	private int taskIcon(String name)
+	{
+		if (taskIcons == null)
+		{
+			taskIcons = new HashMap<>();
+			try (InputStream in = GoalTracker.class.getResourceAsStream("slayer_tasks.json");
+				Reader r = new InputStreamReader(in, StandardCharsets.UTF_8))
+			{
+				gson.fromJson(r, JsonObject.class).entrySet().forEach(e -> taskIcons.put(e.getKey(), e.getValue().getAsInt()));
+			}
+			catch (IOException | RuntimeException e)
+			{
+				log.debug("slayer_tasks.json can't be read", e);
+			}
+		}
+		return taskIcons.getOrDefault(name.toLowerCase(Locale.ROOT).replaceFirst("^the ", ""), ItemID.SLAYER_GEM);
 	}
 
 	/** The icon for a goal on screen: its skill, its item, or a picture for its kind. Looked up once. */
@@ -1560,13 +1586,15 @@ class GoalTracker
 		{
 			message = "Nib Tracker's server isn't sending goals yet. It needs updating (plugin.sql).";
 		}
-		else if (rows.isEmpty())
+		else if (rows.stream().allMatch(r -> r.extra))
 		{
 			message = "No open goals. Add some in Nib Tracker, or open it once with this character selected so it sends them.";
 		}
 		else
 		{
-			message = null;
+			// A notice from Nib Tracker (an update to get, a key that stopped working) shows in the panel, never on the
+			// game screen.
+			message = notice.isEmpty() ? null : notice;
 		}
 		StringBuilder key = new StringBuilder(title).append('|').append(message);
 		for (GoalsPanel.Row r : rows)

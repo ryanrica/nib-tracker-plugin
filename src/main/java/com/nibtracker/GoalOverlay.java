@@ -58,7 +58,7 @@ class GoalOverlay extends Overlay
 		/* Something to act on now (patches ready, tasks due): the value shows in green. */
 		final boolean ready;
 		final String tooltip;
-		/* The value up to its first " · ", for Compact ("Ready · then see Jane..." is "Ready"). */
+		/* The value up to its first " · ", for Compact ("Ready · then see Jane..." is "Ready"), without " left". */
 		final String shortValue;
 
 		Entry(String box, BufferedImage icon, String title, String value, String detail, double progress, boolean ready, String tooltip)
@@ -72,7 +72,8 @@ class GoalOverlay extends Overlay
 			this.ready = ready;
 			this.tooltip = tooltip;
 			int dot = value.indexOf(" · ");
-			this.shortValue = dot > 0 ? value.substring(0, dot) : value;
+			// Compact drops a trailing " left" too: the Slayer task's "120 left" is "120".
+			this.shortValue = (dot > 0 ? value.substring(0, dot) : value).replaceFirst(" left$", "");
 		}
 	}
 
