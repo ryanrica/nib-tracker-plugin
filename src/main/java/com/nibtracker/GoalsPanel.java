@@ -2005,6 +2005,12 @@ class GoalsPanel extends PluginPanel
 		{
 			c.click = () -> LinkBrowser.browse(r.link);
 		}
+		// The plugin doesn't route you to a task: Nib Tracker's Slayer page does.
+		if (GoalTracker.SLAYER_TASK.equals(r.id) && c.click != null)
+		{
+			c.parts = "How to get there in Nib Tracker";
+			c.partsToggle = c.click;
+		}
 		return c;
 	}
 

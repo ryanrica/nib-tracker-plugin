@@ -1300,7 +1300,8 @@ class GoalTracker
 
 	/**
 	 * The current Slayer task, its own row at the top of the Skills tab: its monster's picture, name, kills left, a bar
-	 * for kills done out of the task, and where it is (Konar's area). Null when there's no task.
+	 * for kills done out of the task, and Konar's area. How to get there is left to Nib Tracker (the row links to its
+	 * Slayer page). Null when there's no task.
 	 */
 	private GoalsPanel.Row slayerTaskRow()
 	{
@@ -1315,7 +1316,6 @@ class GoalTracker
 		GoalsPanel.Row row = new GoalsPanel.Row(SLAYER_TASK, "Skills", "Task: " + name,
 			left + " left", (amount - left) + " of " + amount + " killed" + (where.isEmpty() ? "" : "  ·  " + where),
 			amount > 0 ? (double) (amount - left) / amount : -1, false, 0, null, null, taskIcon(name), NibTrackerApi.SITE + "/#slayer");
-		row.travel = where;
 		// Not a goal: left out of the goal count, and drawn by the Skills tab itself.
 		row.extra = true;
 		return row;
