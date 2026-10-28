@@ -67,11 +67,11 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	private static final int MAX_QUEUE = 2000;
 	private static final int BATCH = 50;
 	private static final long MAX_BACKOFF_MS = 5 * 60_000L;
-	/* IRONMAN varbit value -> the account modes the web app uses. */
 	/* What this build supports beyond the basics, sent with snapshot_character: add one with each new server-driven feature. */
 	private static final List<String> CAPABILITIES = Arrays.asList("potion_storage", "bank_tabs", "clog_lines",
-		"watch_vars", "watch_containers", "watch_chat", "notice");
-	private static final String[] ACCOUNT_TYPES ={"main", "ironman", "ultimate", "hardcore", "group", "group", "group"};
+		"watch_vars", "watch_containers", "notice");
+	/* IRONMAN varbit value -> the account modes the web app uses. */
+	private static final String[] ACCOUNT_TYPES = {"main", "ironman", "ultimate", "hardcore", "group", "group", "group"};
 
 	@Inject
 	private Client client;
@@ -331,13 +331,6 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		ChatParser.Parsed p = ChatParser.parse(msg);
 		if (p == null)
 		{
-			// A game message the server asked for: sent as it is, for the server to read.
-			if (ChatParser.watched(msg, settings.get("chat")) && allowed("chat", config.sendKc()))
-			{
-				JsonObject d = new JsonObject();
-				d.addProperty("msg", msg);
-				add("chat", d);
-			}
 			return;
 		}
 		goals.onParsed(p.type, p.data);

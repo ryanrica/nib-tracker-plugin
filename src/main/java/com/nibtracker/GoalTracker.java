@@ -151,6 +151,16 @@ class GoalTracker
 	private Map<String, Integer> taskIcons;
 	/* The server's notice for the panel's status line, or empty. */
 	private String notice = "";
+	/* The notices the server can ask for (settings "notice": one of these codes). The words are the plugin's own, so
+	   the server can't make the panel say anything else; an unknown code shows nothing. */
+	private static final Map<String, String> NOTICES = new HashMap<>();
+
+	static
+	{
+		NOTICES.put("update", "A newer Nib Tracker plugin is out. Update it from the Plugin Hub to keep everything syncing.");
+		NOTICES.put("key_revoked", "Your plugin key no longer works. Make a new one on Nib Tracker's Account page and paste it in this plugin's settings.");
+		NOTICES.put("maintenance", "Nib Tracker is down for maintenance. Nothing is lost: what you do is sent once it's back.");
+	}
 	/* Icons for the on-screen goals, and item ids found by name, so each is looked up once. */
 	private final Map<String, BufferedImage> overlayIcons = new HashMap<>();
 	private final Map<String, Integer> itemIds = new HashMap<>();
@@ -343,9 +353,7 @@ class GoalTracker
 				}
 				facts.kcAliases = m;
 			}
-			JsonElement n = settings.get("notice");
-			notice = n != null && n.isJsonPrimitive() ? n.getAsString().trim() : "";
-			notice = notice.length() > 200 ? notice.substring(0, 200) : notice;
+			notice = noticeText(settings.get("notice"));
 			dirty = true;
 		});
 	}
@@ -1324,6 +1332,12 @@ class GoalTracker
 		// Not a goal: left out of the goal count, and drawn by the Skills tab itself.
 		row.extra = true;
 		return row;
+	}
+
+	/** The panel's words for the server's notice code, or empty for none or a code this plugin doesn't know. */
+	static String noticeText(JsonElement code)
+	{
+		return code != null && code.isJsonPrimitive() ? NOTICES.getOrDefault(code.getAsString(), "") : "";
 	}
 
 	/**
