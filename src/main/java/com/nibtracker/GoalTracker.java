@@ -5,8 +5,13 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -24,6 +29,7 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import javax.swing.SwingUtilities;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.Item;
@@ -57,6 +63,7 @@ import net.runelite.http.api.item.ItemPrice;
  * completes. Progress is worked out by GoalProgress for the built-in goal types; for the rest the server's is shown.
  * Client thread unless noted.
  */
+@Slf4j
 @Singleton
 class GoalTracker
 {
@@ -140,6 +147,8 @@ class GoalTracker
 
 	private EventSink sink;
 	private int slayerSeen = -1;
+	/* Each Slayer task's picture (see taskIcon), read once. */
+	private Map<String, Integer> taskIcons;
 	/* Icons for the on-screen goals, and item ids found by name, so each is looked up once. */
 	private final Map<String, BufferedImage> overlayIcons = new HashMap<>();
 	private final Map<String, Integer> itemIds = new HashMap<>();
@@ -473,7 +482,7 @@ class GoalTracker
 			}
 			rows.add(row(g, r, planner));
 		}
-		GoalsPanel.Row task = slayerTaskRow(results);
+		GoalsPanel.Row task = slayerTaskRow();
 		if (task != null)
 		{
 			rows.add(task);
@@ -1290,37 +1299,48 @@ class GoalTracker
 	}
 
 	/**
-	 * The current Slayer task, under the nearest open Slayer level or XP goal (else under a Slayer heading in Skills):
-	 * its name, kills left and a bar for kills done out of the task. Null when there's no task.
+	 * The current Slayer task, its own row at the top of the Skills tab: its monster's picture, name, kills left, a bar
+	 * for kills done out of the task, and where it is (Konar's area). Null when there's no task.
 	 */
-	private GoalsPanel.Row slayerTaskRow(Map<String, GoalProgress.Result> results)
+	private GoalsPanel.Row slayerTaskRow()
 	{
 		JsonObject t = slayer.current();
 		if (t == null || !t.has("name") || t.get("remaining").getAsInt() <= 0)
 		{
 			return null;
 		}
-		// The open Slayer goal closest to done, so it sits under the one listed first (73 Slayer before 80 Slayer). Only a
-		// goal shown as its own row: under a part folded inside a main goal (Base 80) it would never be seen.
-		GoalProgress.Goal goal = null;
-		for (GoalProgress.Goal g : goals)
-		{
-			if (("skill_level".equals(g.type) || "skill_xp".equals(g.type)) && "slayer".equals(GoalProgress.skillKey(g.str("skill")))
-				&& g.parent.isEmpty() && !results.get(g.id).done
-				&& (goal == null || results.get(g.id).progress > results.get(goal.id).progress))
-			{
-				goal = g;
-			}
-		}
+		String name = t.get("name").getAsString();
 		int left = t.get("remaining").getAsInt(), amount = Math.max(left, t.has("amount") ? t.get("amount").getAsInt() : left);
 		String where = t.has("location") ? t.get("location").getAsString() : "";
-		GoalsPanel.Row row = new GoalsPanel.Row(SLAYER_TASK, "Skills", "Task: " + t.get("name").getAsString(),
+		GoalsPanel.Row row = new GoalsPanel.Row(SLAYER_TASK, "Skills", "Task: " + name,
 			left + " left", (amount - left) + " of " + amount + " killed" + (where.isEmpty() ? "" : "  ·  " + where),
-			amount > 0 ? (double) (amount - left) / amount : -1, false, 0, null, null, ItemID.SLAYER_GEM, NibTrackerApi.SITE + "/#slayer");
-		// With no Slayer goal the Skills tab shows it on its own (an extra without its goal is left out of the goals).
-		row.parent = goal == null ? "" : goal.id;
+			amount > 0 ? (double) (amount - left) / amount : -1, false, 0, null, null, taskIcon(name), NibTrackerApi.SITE + "/#slayer");
+		row.travel = where;
+		// Not a goal: left out of the goal count, and drawn by the Skills tab itself.
 		row.extra = true;
 		return row;
+	}
+
+	/**
+	 * The item picture RuneLite's Slayer plugin shows for a task (slayer_tasks.json is its Task list), else the
+	 * enchanted gem. Names are lower case without a leading "the" (the game says "Abyssal Sire", RuneLite "The ...").
+	 */
+	private int taskIcon(String name)
+	{
+		if (taskIcons == null)
+		{
+			taskIcons = new HashMap<>();
+			try (InputStream in = GoalTracker.class.getResourceAsStream("slayer_tasks.json");
+				Reader r = new InputStreamReader(in, StandardCharsets.UTF_8))
+			{
+				gson.fromJson(r, JsonObject.class).entrySet().forEach(e -> taskIcons.put(e.getKey(), e.getValue().getAsInt()));
+			}
+			catch (IOException | RuntimeException e)
+			{
+				log.debug("slayer_tasks.json can't be read", e);
+			}
+		}
+		return taskIcons.getOrDefault(name.toLowerCase(Locale.ROOT).replaceFirst("^the ", ""), ItemID.SLAYER_GEM);
 	}
 
 	/** The icon for a goal on screen: its skill, its item, or a picture for its kind. Looked up once. */

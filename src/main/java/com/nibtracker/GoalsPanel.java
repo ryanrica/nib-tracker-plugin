@@ -382,8 +382,13 @@ class GoalsPanel extends PluginPanel
 			for (String s : order)
 			{
 				int before = list.getComponentCount();
-				boolean shown = DAILIES.equals(s) ? dailies(extras, true) : FARMING.equals(s) ? farmingOverview(extras)
-					: picksSection(s, GoalLayout.favourites(layout.sections.getOrDefault(s, Collections.emptyList()), extras.favourites));
+				GoalLayout.Picks picks = GoalLayout.favourites(layout.sections.getOrDefault(s, Collections.emptyList()), extras.favourites);
+				Row task = slayerTask();
+				if (task != null && s.equals(task.category) && favourites(s).contains(task.id))
+				{
+					picks.rows.add(0, task);
+				}
+				boolean shown = DAILIES.equals(s) ? dailies(extras, true) : FARMING.equals(s) ? farmingOverview(extras) : picksSection(s, picks);
 				if (shown)
 				{
 					draggable((JComponent) list.getComponent(before), s, order);
@@ -765,24 +770,18 @@ class GoalsPanel extends PluginPanel
 		}
 		filters(tags);
 		String f = currentFilter();
+		// Skills starts with the current Slayer task, a row of its own above the skills.
+		Row task = "Skills".equals(category) ? slayerTask() : null;
+		if (task != null)
+		{
+			list.add(card(goalCard(task, task.progress, task.detail)));
+		}
 		// Favourites stay where they are here (★ on the row); Overview is where they're gathered.
 		for (GoalLayout.Group g : open)
 		{
 			if (ALL.equals(f) || f.equals(g.main.tag))
 			{
 				group(g);
-			}
-		}
-		// Skills: the current Slayer task, small, under a Slayer heading (a Slayer goal has it under itself instead).
-		Row task = "Skills".equals(category) ? lastRows.stream()
-			.filter(r -> GoalTracker.SLAYER_TASK.equals(r.id) && r.parent.isEmpty()).findFirst().orElse(null) : null;
-		if (task != null)
-		{
-			list.add(sectionHeader(GoalTracker.SLAYER_TASK, "Slayer", 1, icons.computeIfAbsent("heading:" + Skill.SLAYER.name(),
-				k -> new ImageIcon(fitTo(skillIcons.getSkillImage(Skill.SLAYER, false), 14)))));
-			if (!collapsed.contains(GoalTracker.SLAYER_TASK))
-			{
-				list.add(children(Collections.singletonList(goalCard(task, task.progress, task.detail))));
 			}
 		}
 		List<GoalLayout.Group> shownDone = new ArrayList<>();
@@ -805,6 +804,12 @@ class GoalsPanel extends PluginPanel
 		{
 			list.add(note("Nothing here yet."));
 		}
+	}
+
+	/** The current Slayer task's row, or null with no task. It isn't a goal, so GoalLayout leaves it out. */
+	private Row slayerTask()
+	{
+		return lastRows.stream().filter(r -> GoalTracker.SLAYER_TASK.equals(r.id)).findFirst().orElse(null);
 	}
 
 	/** Daily tasks and farm timers for the panel, worked out by GoalTracker. */
