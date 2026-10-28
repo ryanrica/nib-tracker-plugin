@@ -1,8 +1,6 @@
 package com.nibtracker;
 
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -52,37 +50,6 @@ final class ChatParser
 
 	private ChatParser()
 	{
-	}
-
-	/**
-	 * Whether a game message the patterns here don't know holds one of the server's chat fragments (settings "chat"),
-	 * so the server can start reading new messages without a plugin update. Plain text ignoring case, never a pattern,
-	 * so nothing from the server can hang the client: at most 100 fragments of 3 to 100 characters.
-	 */
-	static boolean watched(String msg, JsonElement fragments)
-	{
-		if (msg == null || fragments == null || !fragments.isJsonArray())
-		{
-			return false;
-		}
-		String line = msg.toLowerCase(Locale.ROOT);
-		int n = 0;
-		for (JsonElement f : fragments.getAsJsonArray())
-		{
-			if (++n > 100)
-			{
-				break;
-			}
-			if (f.isJsonPrimitive() && f.getAsJsonPrimitive().isString())
-			{
-				String s = f.getAsString();
-				if (s.length() >= 3 && s.length() <= 100 && line.contains(s.toLowerCase(Locale.ROOT)))
-				{
-					return true;
-				}
-			}
-		}
-		return false;
 	}
 
 	static Parsed parse(String msg)

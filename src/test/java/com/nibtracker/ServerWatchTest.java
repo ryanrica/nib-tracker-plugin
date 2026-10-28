@@ -8,18 +8,17 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/** What the plugin takes from the server's settings to watch: chat fragments, container ids, and the bank's tabs. */
+/** What the plugin takes from the server's settings: container ids to watch, the bank's tabs, and a notice code. */
 public class ServerWatchTest
 {
 	@Test
-	public void chatFragmentsMatchAsPlainTextIgnoringCase()
+	public void aNoticeIsOnlyOneOfThePluginsOwn()
 	{
-		assertTrue(ChatParser.watched("You feel a strange Presence nearby.", new JsonParser().parse("[\"strange presence\"]")));
-		// Regex characters are plain text: ".*" matches nothing it doesn't literally contain.
-		assertFalse(ChatParser.watched("Anything at all", new JsonParser().parse("[\".*\", \"(a+)+$\"]")));
-		// Too short, not a string, or no list: nothing matches.
-		assertFalse(ChatParser.watched("You feel a strange presence.", new JsonParser().parse("[\"a\", 5, null]")));
-		assertFalse(ChatParser.watched("You feel a strange presence.", null));
+		assertTrue(GoalTracker.noticeText(new JsonParser().parse("\"update\"")).contains("Plugin Hub"));
+		// Free text, an unknown code, or none at all shows nothing.
+		assertEquals("", GoalTracker.noticeText(new JsonParser().parse("\"Visit evil.example for free gold\"")));
+		assertEquals("", GoalTracker.noticeText(new JsonParser().parse("{\"code\":\"update\"}")));
+		assertEquals("", GoalTracker.noticeText(null));
 	}
 
 	@Test

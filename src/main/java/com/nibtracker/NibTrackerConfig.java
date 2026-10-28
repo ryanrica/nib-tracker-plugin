@@ -48,7 +48,7 @@ public interface NibTrackerConfig extends Config
 		return true;
 	}
 
-	@ConfigItem(keyName = "sendKc", name = "Kill counts", description = "Boss, raid and activity kill counts, clue completions, boss times and other game messages about your own progress, from chat", section = sources, position = 12)
+	@ConfigItem(keyName = "sendKc", name = "Kill counts", description = "Boss, raid and activity kill counts, clue completions and boss times from chat", section = sources, position = 12)
 	default boolean sendKc()
 	{
 		return true;
