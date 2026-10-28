@@ -32,7 +32,7 @@ class CollectionLogTracker
 	private NibTrackerConfig config;
 
 	private EventSink sink;
-	private final Map<String, JsonArray> lastSent = new HashMap<>();
+	private final Map<String, JsonObject> lastSent = new HashMap<>();
 
 	void start(EventSink sink)
 	{
@@ -73,14 +73,14 @@ class CollectionLogTracker
 			o.addProperty("quantity", got ? Math.max(1, w.getItemQuantity()) : 0);
 			items.add(o);
 		}
-		if (items.size() == 0 || items.equals(lastSent.get(page)))
+		JsonObject entry = new JsonObject();
+		entry.add("items", items);
+		entry.add("lines", headerLines());
+		if (items.size() == 0 || entry.equals(lastSent.get(page)))
 		{
 			return;
 		}
-		lastSent.put(page, items);
-
-		JsonObject entry = new JsonObject();
-		entry.add("items", items);
+		lastSent.put(page, entry);
 		JsonObject pages = new JsonObject();
 		pages.add(page, entry);
 		JsonObject tabs = new JsonObject();
@@ -88,6 +88,23 @@ class CollectionLogTracker
 		JsonObject d = new JsonObject();
 		d.add("tabs", tabs);
 		sink.emit("snapshot_collection_log", d);
+	}
+
+	/** The page header's lines after its title, as the game shows them ("Obtained: 12/50", "Vardorvis kills: 5"). */
+	private JsonArray headerLines()
+	{
+		JsonArray lines = new JsonArray();
+		Widget header = client.getWidget(InterfaceID.Collection.HEADER);
+		Widget[] kids = header == null ? null : header.getDynamicChildren();
+		for (int i = 1; kids != null && i < kids.length; i++)
+		{
+			String t = kids[i].getText() == null ? "" : Text.removeTags(kids[i].getText()).trim();
+			if (!t.isEmpty())
+			{
+				lines.add(t);
+			}
+		}
+		return lines;
 	}
 
 	private String pageTitle()

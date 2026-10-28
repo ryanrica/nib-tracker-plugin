@@ -17,11 +17,13 @@ import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.InventoryID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
 
 /**
- * Bank, seed vault, potion storage, worn equipment and inventory as snapshots. Each is sent a little after it stops changing, and only
+ * Bank (with each item's tab), seed vault, potion storage, worn equipment, inventory and any container the server
+ * watches, as snapshots. Each is sent a little after it stops changing, and only
  * when it differs from the last one sent.
  */
 @Singleton
@@ -54,6 +56,11 @@ class ContainerTracker
 		WATCH.put(InventoryID.INV, new Watch("snapshot_inventory", "gear", 100));
 	}
 
+	/* Any other container the server lists under watch.containers (a looting bag, group storage...), with its id. */
+	private static final Watch SERVER_WATCH = new Watch("snapshot_container", "bank", 10);
+	private static final int[] BANK_TABS = {VarbitID.BANK_TAB_1, VarbitID.BANK_TAB_2, VarbitID.BANK_TAB_3, VarbitID.BANK_TAB_4,
+		VarbitID.BANK_TAB_5, VarbitID.BANK_TAB_6, VarbitID.BANK_TAB_7, VarbitID.BANK_TAB_8, VarbitID.BANK_TAB_9};
+
 	@Inject
 	private Client client;
 
@@ -84,12 +91,12 @@ class ContainerTracker
 	@Subscribe
 	public void onItemContainerChanged(ItemContainerChanged e)
 	{
-		Watch w = WATCH.get(e.getContainerId());
+		Watch w = watch(e.getContainerId());
 		if (w == null || sink == null || !sink.active() || !sink.allowed(w.source, config.sendBank()))
 		{
 			return;
 		}
-		pending.put(e.getContainerId(), items(e.getItemContainer()));
+		pending.put(e.getContainerId(), items(e.getContainerId(), e.getItemContainer()));
 		schedule(e.getContainerId());
 		if (e.getContainerId() == InventoryID.BANK)
 		{
@@ -110,7 +117,18 @@ class ContainerTracker
 
 	private void schedule(int id)
 	{
-		dueAt.putIfAbsent(id, ticks + WATCH.get(id).waitTicks);
+		dueAt.putIfAbsent(id, ticks + watch(id).waitTicks);
+	}
+
+	/** How a container is sent: one of the fixed ones, one the server asks for, or null. */
+	private Watch watch(int id)
+	{
+		Watch w = WATCH.get(id);
+		if (w != null || sink == null)
+		{
+			return w;
+		}
+		return ProgressTracker.watchIds(sink.settings(), "containers", 65536, 50).contains(id) ? SERVER_WATCH : null;
 	}
 
 	void tick()
@@ -127,23 +145,34 @@ class ContainerTracker
 			}
 			int id = due.getKey();
 			JsonArray items = id == POTION_STORAGE ? potions() : pending.remove(id);
-			if (items != null && !items.equals(lastSent.get(id)) && sink.active())
+			Watch w = watch(id);
+			if (w != null && items != null && !items.equals(lastSent.get(id)) && sink.active())
 			{
 				lastSent.put(id, items);
 				JsonObject d = new JsonObject();
+				if (w == SERVER_WATCH)
+				{
+					d.addProperty("container", id);
+				}
 				d.add("items", items);
-				sink.emit(WATCH.get(id).type, d);
+				sink.emit(w.type, d);
 			}
 			return true;
 		});
 	}
 
-	private JsonArray items(ItemContainer c)
+	private JsonArray items(int containerId, ItemContainer c)
 	{
 		JsonArray out = new JsonArray();
 		if (c == null)
 		{
 			return out;
+		}
+		// The bank's tabs are runs of slots, tab 1 first; the slots after them are the main tab (0).
+		int[] tabSizes = new int[containerId == InventoryID.BANK ? BANK_TABS.length : 0];
+		for (int i = 0; i < tabSizes.length; i++)
+		{
+			tabSizes[i] = client.getVarbitValue(BANK_TABS[i]);
 		}
 		Item[] all = c.getItems();
 		for (int slot = 0; slot < all.length; slot++)
@@ -159,6 +188,10 @@ class ContainerTracker
 			o.addProperty("id", id);
 			o.addProperty("name", itemManager.getItemComposition(id).getName());
 			o.addProperty("quantity", it.getQuantity());
+			if (tabSizes.length > 0)
+			{
+				o.addProperty("tab", bankTab(slot, tabSizes));
+			}
 			out.add(o);
 		}
 		return out;
@@ -194,6 +227,21 @@ class ContainerTracker
 			}
 		}
 		return out;
+	}
+
+	/** The bank tab a slot is in, from each tab's size (tabs 1 to 9 in order): 0 for the main tab after them. */
+	static int bankTab(int slot, int[] tabSizes)
+	{
+		int end = 0;
+		for (int i = 0; i < tabSizes.length; i++)
+		{
+			end += Math.max(0, tabSizes[i]);
+			if (slot < end)
+			{
+				return i + 1;
+			}
+		}
+		return 0;
 	}
 
 	/** A real item: not an empty slot, and not a bank placeholder (shown as 0), so canonicalize can't make it owned. */

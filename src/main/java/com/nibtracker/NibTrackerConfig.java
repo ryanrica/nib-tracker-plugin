@@ -48,7 +48,7 @@ public interface NibTrackerConfig extends Config
 		return true;
 	}
 
-	@ConfigItem(keyName = "sendKc", name = "Kill counts", description = "Boss, raid and activity kill counts, clue completions and boss times from chat", section = sources, position = 12)
+	@ConfigItem(keyName = "sendKc", name = "Kill counts", description = "Boss, raid and activity kill counts, clue completions, boss times and other game messages about your own progress, from chat", section = sources, position = 12)
 	default boolean sendKc()
 	{
 		return true;
@@ -90,7 +90,7 @@ public interface NibTrackerConfig extends Config
 		return true;
 	}
 
-	@ConfigItem(keyName = "sendBank", name = "Bank and gear", description = "Bank, seed vault, worn equipment and inventory, when they change", section = sources, position = 19)
+	@ConfigItem(keyName = "sendBank", name = "Bank and gear", description = "Bank (with its tabs), seed vault, potion storage, worn equipment, inventory and other storage of yours Nib Tracker asks for, when they change", section = sources, position = 19)
 	default boolean sendBank()
 	{
 		return true;

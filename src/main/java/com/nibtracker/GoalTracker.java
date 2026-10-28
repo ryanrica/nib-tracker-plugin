@@ -55,6 +55,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.util.ColorUtil;
+import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.Text;
 import net.runelite.http.api.item.ItemPrice;
 
@@ -149,6 +150,9 @@ class GoalTracker
 	private int slayerSeen = -1;
 	/* Each Slayer task's picture (see taskIcon), read once. */
 	private Map<String, Integer> taskIcons;
+	/* The server's notice for the game screen, or empty. */
+	private String notice = "";
+	private static final BufferedImage NOTICE_ICON = ImageUtil.loadImageResource(GoalTracker.class, "goals_icon.png");
 	/* Icons for the on-screen goals, and item ids found by name, so each is looked up once. */
 	private final Map<String, BufferedImage> overlayIcons = new HashMap<>();
 	private final Map<String, Integer> itemIds = new HashMap<>();
@@ -341,6 +345,9 @@ class GoalTracker
 				}
 				facts.kcAliases = m;
 			}
+			JsonElement n = settings.get("notice");
+			notice = n != null && n.isJsonPrimitive() ? n.getAsString().trim() : "";
+			notice = notice.length() > 200 ? notice.substring(0, 200) : notice;
 			dirty = true;
 		});
 	}
@@ -439,6 +446,12 @@ class GoalTracker
 				// In its home tab's box, also when pinned from Overview.
 				onScreen.add(goalEntry(r, r.category));
 			}
+		}
+		// A notice from Nib Tracker (settings "notice": an update to get, a key that stopped working) heads the screen.
+		if (!notice.isEmpty())
+		{
+			onScreen.add(0, new GoalOverlay.Entry("Nib Tracker", NOTICE_ICON, notice, "", "", -1, false,
+				ColorUtil.wrapWithColorTag("Nib Tracker", TIP_TITLE) + "</br>" + Text.escapeJagex(notice)));
 		}
 		long now = System.currentTimeMillis();
 		GoalsPanel.Extras extras = extras(now, pins, onScreen, rows);

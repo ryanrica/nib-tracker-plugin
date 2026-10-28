@@ -375,8 +375,14 @@ class ProgressTracker
 
 	private Set<Integer> ids(String key)
 	{
+		return sink == null ? new HashSet<>() : watchIds(sink.settings(), key, MAX_VAR_ID, 500);
+	}
+
+	/** The server's watch list under key ("varps", "varbits", "containers"): up to limit plain ids from 0 to below max. */
+	static Set<Integer> watchIds(JsonObject settings, String key, int max, int limit)
+	{
 		Set<Integer> out = new HashSet<>();
-		JsonElement w = sink == null ? null : sink.settings().get("watch");
+		JsonElement w = settings.get("watch");
 		if (w == null || !w.isJsonObject())
 		{
 			return out;
@@ -389,10 +395,10 @@ class ProgressTracker
 		for (JsonElement e : list.getAsJsonArray())
 		{
 			// Only plain ids in the game's range; anything else from the server is ignored.
-			if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber() && out.size() < 500)
+			if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber() && out.size() < limit)
 			{
 				int id = e.getAsInt();
-				if (id >= 0 && id < MAX_VAR_ID)
+				if (id >= 0 && id < max)
 				{
 					out.add(id);
 				}
