@@ -36,7 +36,7 @@ folded away, or turned off under **Goals** in the plugin settings. Farm timers c
 through Nib Tracker, so new plantings show up once the Nib Tracker site has caught up.
 
 The icons along the top of the panel switch between the **Overview** (everything) and one kind at a time: skills,
-quests, bosses, collection log, items, achievement diaries, combat achievements, daily tasks and farming. Each has its
+quests and achievement diaries (one tab, each under its own heading), bingo, farming, combat achievements, collection log and daily tasks. Each has its
 own filters: combat achievements and diaries by tier, quests by whether you've started them, daily tasks by due or done,
 and farming by kind of patch (herbs, trees, fruit trees, Hespori and every other kind you have a timer on), ready ones
 first, each saying where it is and the teleport to use. **Run order** lists your favourite patches as one farm run over
