@@ -607,7 +607,8 @@ class GoalsPanel extends PluginPanel
 		}
 		if (BINGO.equals(v) && itemManager != null)
 		{
-			itemIcon(ItemID.BINGO_TABARD, 28, tab::icon);
+			// Swords and emblem (g), from the grid master bingo rewards.
+			itemIcon(ItemID.BINGO_SWORDS_GREEN, 28, tab::icon);
 			return;
 		}
 		if ("Combat achievements".equals(v))
