@@ -1,5 +1,6 @@
 package com.nibtracker;
 
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -173,6 +174,7 @@ class GoalsPanel extends PluginPanel
 	private static final String COMPLETED = "Completed";
 	private static final String DAILIES = "Daily tasks";
 	private static final String FARMING = "Farming";
+	private static final String BINGO = "Bingo";
 	private static final String OVERVIEW = "Overview";
 	private static final String ALL = "All";
 	/* The Farming tab's group chips, in order, before its kind chips (Favourites is drawn with a ★ in front). */
@@ -189,7 +191,7 @@ class GoalsPanel extends PluginPanel
 	/* The tabs, four to a row: Overview, Skills, Quests, Achievement diaries; then Farming, Combat achievements,
 	   Collection log, Daily tasks; anything else after. */
 	private static final List<String> TAB_ORDER = Arrays.asList("Overview", "Skills", "Quests", "Achievement diaries",
-		"Farming", "Combat achievements", "Collection log", "Daily tasks", "Bosses", "Items", "Other");
+		"Farming", "Combat achievements", "Collection log", "Daily tasks", "Bingo", "Bosses", "Items", "Other");
 	/* Sub-filter values in the order they're offered. */
 	private static final List<String> TAG_ORDER = Arrays.asList("Easy", "Medium", "Hard", "Elite", "Master", "Grandmaster", "Not started", "In progress");
 	private static final BufferedImage LOGO = ImageUtil.loadImageResource(GoalsPanel.class, "goals_icon.png");
@@ -363,6 +365,11 @@ class GoalsPanel extends PluginPanel
 		views.removeAll(Arrays.asList("Bosses", "Items", "Other"));
 		views.add(DAILIES);
 		views.add(FARMING);
+		// Only for a player on a live board: everyone else would have an empty tab on a row of its own.
+		if (!extras.boards.isEmpty())
+		{
+			views.add(BINGO);
+		}
 		views.sort(Comparator.comparingInt(v -> TAB_ORDER.indexOf(v) < 0 ? TAB_ORDER.size() : TAB_ORDER.indexOf(v)));
 		if (!views.contains(view))
 		{
@@ -404,6 +411,11 @@ class GoalsPanel extends PluginPanel
 			{
 				list.add(note("Star things in any tab to see them here."));
 			}
+		}
+		else if (BINGO.equals(view))
+		{
+			filters.setVisible(false);
+			bingoView(extras);
 		}
 		else if (DAILIES.equals(view))
 		{
@@ -590,6 +602,11 @@ class GoalsPanel extends PluginPanel
 		if (DAILIES.equals(v) && itemManager != null)
 		{
 			itemIcon(ItemID.GIANT_STOPWATCH, 28, tab::icon);
+			return;
+		}
+		if (BINGO.equals(v) && itemManager != null)
+		{
+			itemIcon(ItemID.BINGO_TABARD, 28, tab::icon);
 			return;
 		}
 		if ("Combat achievements".equals(v))
@@ -841,6 +858,125 @@ class GoalsPanel extends PluginPanel
 		/* Overview's sections, top to bottom (see GoalLayout.overviewOrder), and whether its tip on reordering them is hidden. */
 		final List<String> overviewOrder = new ArrayList<>();
 		boolean overviewTipHidden;
+		/* The player's live bingo boards (see Routines.bingo). */
+		final List<Routines.Board> boards = new ArrayList<>();
+	}
+
+	/**
+	 * Bingo: each live board under its name and how many tiles are done, as a grid of its tiles' pictures. A done tile
+	 * is filled gold with a ✓; the rest are dimmed. Hover a tile for what it asks; click to open the board in Nib Tracker.
+	 */
+	private void bingoView(Extras x)
+	{
+		for (Routines.Board b : x.boards)
+		{
+			String key = "bingo:" + b.id;
+			int done = 0, tiles = 0;
+			for (Routines.Tile t : b.tiles)
+			{
+				tiles += t == null ? 0 : 1;
+				done += t != null && t.done ? 1 : 0;
+			}
+			list.add(sectionHeader(key, b.name, done, null, null, null, false));
+			if (collapsed.contains(key))
+			{
+				continue;
+			}
+			JPanel grid = new JPanel(new GridLayout(b.size, b.size, 3, 3));
+			grid.setOpaque(false);
+			for (Routines.Tile t : b.tiles)
+			{
+				grid.add(new BingoTile(t, b.size));
+			}
+			list.add(grid);
+			list.add(new Wrap(done + " of " + tiles + " tiles done. Click a tile to open the board in Nib Tracker.", BODY, MUTED,
+				PluginPanel.PANEL_WIDTH - 20, 0));
+		}
+	}
+
+	/**
+	 * One bingo tile: a rounded square with the tile's picture in the middle (its item, or its skill for an XP tile),
+	 * gold-washed and ringed with a ✓ in the corner when done, dimmed when not. Empty slots stay blank.
+	 */
+	private final class BingoTile extends JComponent
+	{
+		private final Routines.Tile tile;
+		private final int side;
+		private Icon picture;
+
+		BingoTile(Routines.Tile tile, int size)
+		{
+			this.tile = tile;
+			// The panel's width shared between the tiles and the 3px gaps, for a square tile at any board size.
+			side = (PluginPanel.PANEL_WIDTH - 20 - 3 * (size - 1)) / size;
+			setPreferredSize(new Dimension(side, side));
+			if (tile == null)
+			{
+				return;
+			}
+			int px = Math.max(12, Math.min(32, side - 6));
+			if (!tile.skill.isEmpty())
+			{
+				Skill skill = skill(tile.skill);
+				if (skill != null)
+				{
+					picture = new ImageIcon(fitTo(skillIcons.getSkillImage(skill, false), px));
+				}
+			}
+			else if (tile.itemId > 0 && itemManager != null)
+			{
+				itemIcon(tile.itemId, px, i -> {
+					picture = i;
+					repaint();
+				});
+			}
+			setToolTipText("<html>" + escape(tile.label) + (tile.done ? "<br>Done" : "") + "<br>Click to open the board in Nib Tracker</html>");
+			setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			onClick(this, () -> LinkBrowser.browse(NibTrackerApi.SITE + "/#bingo"));
+		}
+
+		@Override
+		protected void paintComponent(Graphics g)
+		{
+			if (tile == null)
+			{
+				return;
+			}
+			Graphics2D g2 = (Graphics2D) g.create();
+			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			int w = getWidth(), h = getHeight();
+			g2.setColor(tile.done ? GOLD_WASH : ColorScheme.DARKER_GRAY_COLOR);
+			g2.fillRoundRect(0, 0, w, h, 6, 6);
+			g2.setColor(tile.done ? GOLD : HAIR);
+			g2.drawRoundRect(0, 0, w - 1, h - 1, 6, 6);
+			if (picture != null)
+			{
+				if (!tile.done)
+				{
+					g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.55f));
+				}
+				picture.paintIcon(this, g2, (w - picture.getIconWidth()) / 2, (h - picture.getIconHeight()) / 2);
+				g2.setComposite(AlphaComposite.SrcOver);
+			}
+			if (tile.done)
+			{
+				new Check(DONE).paintIcon(this, g2, w - 11, 2);
+			}
+			g2.dispose();
+		}
+	}
+
+	/** A skill by its name in the feed ("Slayer", any case), or null for one this client doesn't know. */
+	private static Skill skill(String name)
+	{
+		for (Skill s : Skill.values())
+		{
+			if (s.getName().equalsIgnoreCase(name))
+			{
+				return s;
+			}
+		}
+		return null;
 	}
 
 	/** A stop in the one run over every kind of patch: its number, the place, and the teleport to use (null: all excluded). */

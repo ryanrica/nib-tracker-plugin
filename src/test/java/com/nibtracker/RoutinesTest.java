@@ -103,4 +103,25 @@ public class RoutinesTest
 		assertEquals("", r.get(0).teles.get(1).item);
 		assertTrue(Routines.route(null).isEmpty());
 	}
+
+	@Test
+	public void bingoBoardsKeepOnlyWhatFits()
+	{
+		List<Routines.Board> b = Routines.bingo(new JsonParser().parse(
+			"[{\"id\":\"a\",\"name\":\"Clan bingo\",\"size\":3,\"tiles\":["
+				+ "{\"idx\":0,\"label\":\"Tanzanite fang\",\"itemId\":12922,\"done\":true},"
+				+ "{\"idx\":4,\"label\":\"80 Slayer\",\"skill\":\"Slayer\"},"
+				+ "{\"idx\":9,\"label\":\"Off the board\"},{\"label\":\"No idx\"}]},"
+				+ "{\"name\":\"Too big\",\"size\":8},{\"name\":\"\",\"size\":4}]"));
+		assertEquals(1, b.size());
+		assertEquals(9, b.get(0).tiles.length);
+		assertEquals("Tanzanite fang", b.get(0).tiles[0].label);
+		assertTrue(b.get(0).tiles[0].done);
+		assertEquals("Slayer", b.get(0).tiles[4].skill);
+		assertFalse(b.get(0).tiles[4].done);
+		// Empty slots, a tile past the board and one with no idx are left out.
+		assertEquals(null, b.get(0).tiles[1]);
+		assertEquals(2, java.util.Arrays.stream(b.get(0).tiles).filter(java.util.Objects::nonNull).count());
+		assertTrue(Routines.bingo(null).isEmpty());
+	}
 }

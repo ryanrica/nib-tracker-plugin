@@ -50,6 +50,8 @@ Overview's sections start as Farming, Daily tasks, Combat achievements, Quests, 
 Drag a section's heading onto another to move it there, or right-click a heading for Move up, Move down and Reset order
 (a tip at the top of Overview says so until you hide it). Each heading has the same icon as its tab.
 
+On a live bingo board in one of your Nib Tracker groups, a **Bingo** tab shows each board as a small grid of its tiles' pictures: done tiles in gold with a tick, the rest dimmed. Hover a tile for what it asks; click to open the board in Nib Tracker.
+
 To keep an eye on a goal while you play, right-click it in the panel and choose **Show on game screen**. Daily tasks,
 farming, or one kind of patch (just herbs, say) can go on screen the same way. The on-screen card shows each with its
 icon, name, value ("82/83", "2 ready"), a progress bar and a line on what's next (the XP left, a combat achievement's

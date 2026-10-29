@@ -120,6 +120,8 @@ class GoalTracker
 	private List<Routines.Patch> feedFarm = Collections.emptyList();
 	/* The one run over every kind of patch, stop by stop, with each stop's teleports (see Routines.Stop). */
 	private List<Routines.Stop> feedRoute = Collections.emptyList();
+	/* The player's live bingo boards, for the panel's Bingo tab. */
+	private List<Routines.Board> feedBingo = Collections.emptyList();
 	/* The patches shown: worked out here from Time Tracking, with the feed's travel and run order (see farmRows). */
 	private List<Routines.Patch> farm = Collections.emptyList();
 	private PatchPredictor predictor;
@@ -340,6 +342,7 @@ class GoalTracker
 			}
 			feedFarm = Routines.farm(settings.get("farm"));
 			feedRoute = Routines.route(settings.get("route"));
+			feedBingo = Routines.bingo(settings.get("bingo"));
 			JsonElement aliases = settings.get("kcAliases");
 			if (aliases != null && aliases.isJsonObject())
 			{
@@ -535,6 +538,7 @@ class GoalTracker
 		GoalsPanel.Extras x = new GoalsPanel.Extras();
 		x.favouritesByRun = config.farmFavouritesView() == NibTrackerConfig.FarmFavourites.RUN_ORDER;
 		x.overviewOrder.addAll(GoalLayout.overviewOrder(config.overviewOrder()));
+		x.boards.addAll(feedBingo);
 		x.overviewTipHidden = config.overviewTipHidden();
 		for (Routines.Stop s : feedRoute)
 		{
@@ -1621,6 +1625,14 @@ class GoalTracker
 		for (GoalsPanel.DailyView d : extras.dailies)
 		{
 			key.append('|').append(d.id).append(d.status);
+		}
+		for (Routines.Board b : extras.boards)
+		{
+			key.append('|').append(b.id).append(b.name).append(b.size);
+			for (Routines.Tile t : b.tiles)
+			{
+				key.append(t == null ? "-" : t.label + t.itemId + t.skill + t.done);
+			}
 		}
 		for (GoalsPanel.Region r : extras.regions)
 		{
