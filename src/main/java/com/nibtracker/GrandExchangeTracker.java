@@ -12,7 +12,8 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
 
 /**
- * Grand Exchange offers: one event whenever an offer is placed, fills further, completes or is cancelled.
+ * Grand Exchange offers: one event whenever an offer is placed, fills further, completes or is cancelled, and an EMPTY
+ * one when its slot is collected and freed, so the web app stops showing the old offer there.
  * The game resends every offer at login; those are sent once, marked initial, so offers that filled while logged out
  * still arrive (the web app ignores ones it has already seen).
  */
@@ -61,14 +62,15 @@ class GrandExchangeTracker
 		}
 		GrandExchangeOfferState state = o.getState();
 		String key = state + ":" + o.getItemId() + ":" + o.getQuantitySold() + ":" + o.getPrice() + ":" + o.getTotalQuantity();
-		if (key.equals(lastBySlot.put(e.getSlot(), key)) || state == GrandExchangeOfferState.EMPTY)
+		if (key.equals(lastBySlot.put(e.getSlot(), key)))
 		{
 			return;
 		}
 		JsonObject d = new JsonObject();
 		d.addProperty("slot", e.getSlot());
 		d.addProperty("itemId", o.getItemId());
-		d.addProperty("name", itemManager.getItemComposition(o.getItemId()).getName());
+		// An empty slot has no item (id 0), so no name: looking 0 up would name a real item.
+		d.addProperty("name", state == GrandExchangeOfferState.EMPTY ? "" : itemManager.getItemComposition(o.getItemId()).getName());
 		d.addProperty("state", state.name());
 		d.addProperty("total", o.getTotalQuantity());
 		d.addProperty("filled", o.getQuantitySold());
