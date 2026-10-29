@@ -36,7 +36,7 @@ folded away, or turned off under **Goals** in the plugin settings. Farm timers c
 through Nib Tracker, so new plantings show up once the Nib Tracker site has caught up.
 
 The icons along the top of the panel switch between the **Overview** (everything) and one kind at a time: skills,
-quests, bosses, collection log, items, achievement diaries, combat achievements, daily tasks and farming. Each has its
+quests and achievement diaries (one tab, each under its own heading), bingo, farming, combat achievements, collection log and daily tasks. Each has its
 own filters: combat achievements and diaries by tier, quests by whether you've started them, daily tasks by due or done,
 and farming by kind of patch (herbs, trees, fruit trees, Hespori and every other kind you have a timer on), ready ones
 first, each saying where it is and the teleport to use. **Run order** lists your favourite patches as one farm run over
@@ -49,6 +49,8 @@ its next best teleport instead.
 Overview's sections start as Farming, Daily tasks, Combat achievements, Quests, Collection log, Skills, then the rest.
 Drag a section's heading onto another to move it there, or right-click a heading for Move up, Move down and Reset order
 (a tip at the top of Overview says so until you hide it). Each heading has the same icon as its tab.
+
+The **Bingo** tab shows each live board (3x3 to 5x5) from your Nib Tracker groups as a small grid of its tiles' pictures: done tiles in gold with a tick, the rest dimmed. Hover a tile for what it asks; click to open that board in Nib Tracker. With no live board, it links to Bingo on the site.
 
 To keep an eye on a goal while you play, right-click it in the panel and choose **Show on game screen**. Daily tasks,
 farming, or one kind of patch (just herbs, say) can go on screen the same way. The on-screen card shows each with its

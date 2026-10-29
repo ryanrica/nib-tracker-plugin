@@ -1,5 +1,6 @@
 package com.nibtracker;
 
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -173,6 +174,10 @@ class GoalsPanel extends PluginPanel
 	private static final String COMPLETED = "Completed";
 	private static final String DAILIES = "Daily tasks";
 	private static final String FARMING = "Farming";
+	private static final String BINGO = "Bingo";
+	/* Quests and achievement diaries share one tab, each under its own sub-heading. */
+	private static final String QUESTS_DIARIES = "Quests & diaries";
+	private static final List<String> QUESTS_DIARIES_PARTS = Arrays.asList("Quests", "Achievement diaries");
 	private static final String OVERVIEW = "Overview";
 	private static final String ALL = "All";
 	/* The Farming tab's group chips, in order, before its kind chips (Favourites is drawn with a ★ in front). */
@@ -188,7 +193,7 @@ class GoalsPanel extends PluginPanel
 	private static final List<String> FARM_GROUPS = Arrays.asList(ALL_PATCHES, FAVOURITES, RUN_ORDER, SPECIAL, ALL_TREES, CONTRACT);
 	/* The tabs, four to a row: Overview, Skills, Quests, Achievement diaries; then Farming, Combat achievements,
 	   Collection log, Daily tasks; anything else after. */
-	private static final List<String> TAB_ORDER = Arrays.asList("Overview", "Skills", "Quests", "Achievement diaries",
+	private static final List<String> TAB_ORDER = Arrays.asList("Overview", "Skills", QUESTS_DIARIES, "Bingo",
 		"Farming", "Combat achievements", "Collection log", "Daily tasks", "Bosses", "Items", "Other");
 	/* Sub-filter values in the order they're offered. */
 	private static final List<String> TAG_ORDER = Arrays.asList("Easy", "Medium", "Hard", "Elite", "Master", "Grandmaster", "Not started", "In progress");
@@ -361,8 +366,11 @@ class GoalsPanel extends PluginPanel
 		views.add(OVERVIEW);
 		views.addAll(Arrays.asList(GoalProgress.CATEGORIES));
 		views.removeAll(Arrays.asList("Bosses", "Items", "Other"));
+		views.removeAll(QUESTS_DIARIES_PARTS);
+		views.add(QUESTS_DIARIES);
 		views.add(DAILIES);
 		views.add(FARMING);
+		views.add(BINGO);
 		views.sort(Comparator.comparingInt(v -> TAB_ORDER.indexOf(v) < 0 ? TAB_ORDER.size() : TAB_ORDER.indexOf(v)));
 		if (!views.contains(view))
 		{
@@ -404,6 +412,11 @@ class GoalsPanel extends PluginPanel
 			{
 				list.add(note("Star things in any tab to see them here."));
 			}
+		}
+		else if (BINGO.equals(view))
+		{
+			filters.setVisible(false);
+			bingoView(extras);
 		}
 		else if (DAILIES.equals(view))
 		{
@@ -465,7 +478,7 @@ class GoalsPanel extends PluginPanel
 		}
 		else
 		{
-			categoryView(view, layout);
+			categoryView(QUESTS_DIARIES.equals(view) ? QUESTS_DIARIES_PARTS : Collections.singletonList(view), layout);
 		}
 		// The header's grid layout keeps room for hidden components, so hidden chips are removed, not just hidden;
 		// otherwise leaving Farming left a blank block the size of its chips under the tabs.
@@ -592,6 +605,11 @@ class GoalsPanel extends PluginPanel
 			itemIcon(ItemID.GIANT_STOPWATCH, 28, tab::icon);
 			return;
 		}
+		if (BINGO.equals(v))
+		{
+			tab.icon(new ImageIcon(chequerboard(24)));
+			return;
+		}
 		if ("Combat achievements".equals(v))
 		{
 			tab.icon(new ImageIcon(fitTo(CA_BOOK, 28)));
@@ -603,7 +621,7 @@ class GoalsPanel extends PluginPanel
 			tab.icon(new ImageIcon(fitTo(skillIcons.getSkillImage(skill, false), 26)));
 			return;
 		}
-		int item = "Skills".equals(v) ? ItemID.SKILLCAPE_MAX : fallbackItem(v);
+		int item = "Skills".equals(v) ? ItemID.SKILLCAPE_MAX : fallbackItem(QUESTS_DIARIES.equals(v) ? "Quests" : v);
 		if (item > 0 && itemManager != null)
 		{
 			itemIcon(item, 28, tab::icon);
@@ -696,7 +714,9 @@ class GoalsPanel extends PluginPanel
 	private void filters(List<String> options, Map<String, Integer> iconItems, Map<String, Icon> fixedIcons, String byDefault)
 	{
 		filters.removeAll();
-		filters.setLayout(new GridLayout(0, iconItems.isEmpty() && fixedIcons.isEmpty() ? 3 : 2, 4, 4));
+		// Three short chips to a row (All, Due, Done); two when any has an icon or a longer label (Not started, Elite...).
+		boolean short3 = iconItems.isEmpty() && fixedIcons.isEmpty() && options.stream().allMatch(o -> o.length() <= 5);
+		filters.setLayout(new GridLayout(0, short3 ? 3 : 2, 4, 4));
 		String first = options.contains(byDefault) ? byDefault : options.isEmpty() ? ALL : options.get(0);
 		String current = filter.getOrDefault(view, first);
 		if (!options.contains(current))
@@ -748,13 +768,14 @@ class GoalsPanel extends PluginPanel
 	}
 
 	/** One kind of goal on its own: all of them (no "Show more"), filtered by tier or state where that applies. */
-	private void categoryView(String category, GoalLayout.Layout layout)
+	private void categoryView(List<String> categories, GoalLayout.Layout layout)
 	{
-		List<GoalLayout.Group> open = layout.sections.getOrDefault(category, Collections.emptyList());
+		List<GoalLayout.Group> open = new ArrayList<>();
+		categories.forEach(c -> open.addAll(layout.sections.getOrDefault(c, Collections.emptyList())));
 		List<GoalLayout.Group> finished = new ArrayList<>();
 		for (GoalLayout.Group g : layout.completed)
 		{
-			if (category.equals(g.main.category))
+			if (categories.contains(g.main.category))
 			{
 				finished.add(g);
 			}
@@ -771,18 +792,28 @@ class GoalsPanel extends PluginPanel
 		filters(tags);
 		String f = currentFilter();
 		// Skills starts with the current Slayer task, a row of its own above the skills.
-		Row task = "Skills".equals(category) ? slayerTask() : null;
+		Row task = categories.contains("Skills") ? slayerTask() : null;
 		if (task != null)
 		{
 			list.add(card(goalCard(task, task.progress, task.detail)));
 		}
-		// Favourites stay where they are here (★ on the row); Overview is where they're gathered.
-		for (GoalLayout.Group g : open)
+		// Favourites stay where they are here (★ on the row); Overview is where they're gathered. A shared tab (Quests &
+		// diaries) puts each kind under its own sub-heading.
+		for (String c : categories)
 		{
-			if (ALL.equals(f) || f.equals(g.main.tag))
+			List<GoalLayout.Group> shown = new ArrayList<>();
+			for (GoalLayout.Group g : open)
 			{
-				group(g);
+				if (c.equals(g.main.category) && (ALL.equals(f) || f.equals(g.main.tag)))
+				{
+					shown.add(g);
+				}
 			}
+			if (categories.size() > 1 && !shown.isEmpty())
+			{
+				list.add(subHeader(c, shown.size()));
+			}
+			shown.forEach(this::group);
 		}
 		List<GoalLayout.Group> shownDone = new ArrayList<>();
 		for (GoalLayout.Group g : finished)
@@ -841,6 +872,138 @@ class GoalsPanel extends PluginPanel
 		/* Overview's sections, top to bottom (see GoalLayout.overviewOrder), and whether its tip on reordering them is hidden. */
 		final List<String> overviewOrder = new ArrayList<>();
 		boolean overviewTipHidden;
+		/* The player's live bingo boards (see Routines.bingo). */
+		final List<Routines.Board> boards = new ArrayList<>();
+	}
+
+	/**
+	 * Bingo: each live board under its name and how many tiles are done, as a grid of its tiles' pictures. A done tile
+	 * is filled gold with a ✓; the rest are dimmed. Hover a tile for what it asks; click to open the board in Nib Tracker.
+	 */
+	private void bingoView(Extras x)
+	{
+		if (x.boards.isEmpty())
+		{
+			list.add(note("No live bingo board. Make one or join a group's board in Nib Tracker."));
+			JLabel open = new JLabel("Open Bingo in Nib Tracker");
+			open.setFont(BODY);
+			open.setForeground(GOLD);
+			open.setBorder(new EmptyBorder(0, 2, 4, 2));
+			open.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			onClick(open, () -> LinkBrowser.browse(NibTrackerApi.SITE + "/#bingo"));
+			list.add(open);
+			return;
+		}
+		for (Routines.Board b : x.boards)
+		{
+			String key = "bingo:" + b.id;
+			int done = 0, tiles = 0;
+			for (Routines.Tile t : b.tiles)
+			{
+				tiles += t == null ? 0 : 1;
+				done += t != null && t.done ? 1 : 0;
+			}
+			list.add(sectionHeader(key, b.name, done, null, null, null, false));
+			if (collapsed.contains(key))
+			{
+				continue;
+			}
+			JPanel grid = new JPanel(new GridLayout(b.size, b.size, 3, 3));
+			grid.setOpaque(false);
+			for (Routines.Tile t : b.tiles)
+			{
+				grid.add(new BingoTile(t, b.size, b.id));
+			}
+			list.add(grid);
+			list.add(new Wrap(done + " of " + tiles + " tiles done. Click a tile to open the board in Nib Tracker.", BODY, MUTED,
+				PluginPanel.PANEL_WIDTH - 20, 0));
+		}
+	}
+
+	/**
+	 * One bingo tile: a rounded square with the tile's picture in the middle (its item, or its skill for an XP tile),
+	 * gold-washed and ringed with a ✓ in the corner when done, dimmed when not. Empty slots stay blank.
+	 */
+	private final class BingoTile extends JComponent
+	{
+		private final Routines.Tile tile;
+		private final int side;
+		private Icon picture;
+
+		BingoTile(Routines.Tile tile, int size, String boardId)
+		{
+			this.tile = tile;
+			// The panel's width shared between the tiles and the 3px gaps, for a square tile at any board size.
+			side = (PluginPanel.PANEL_WIDTH - 20 - 3 * (size - 1)) / size;
+			setPreferredSize(new Dimension(side, side));
+			if (tile == null)
+			{
+				return;
+			}
+			int px = Math.max(12, Math.min(32, side - 6));
+			if (!tile.skill.isEmpty())
+			{
+				Skill skill = skill(tile.skill);
+				if (skill != null)
+				{
+					picture = new ImageIcon(fitTo(skillIcons.getSkillImage(skill, false), px));
+				}
+			}
+			else if (tile.itemId > 0 && itemManager != null)
+			{
+				itemIcon(tile.itemId, px, i -> {
+					picture = i;
+					repaint();
+				});
+			}
+			setToolTipText("<html>" + escape(tile.label) + (tile.done ? "<br>Done" : "") + "<br>Click to open the board in Nib Tracker</html>");
+			setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			// Straight to this board; the bingo page when the board has no usable id.
+			onClick(this, () -> LinkBrowser.browse(NibTrackerApi.SITE + "/#bingo" + (boardId.isEmpty() ? "" : "/" + boardId)));
+		}
+
+		@Override
+		protected void paintComponent(Graphics g)
+		{
+			if (tile == null)
+			{
+				return;
+			}
+			Graphics2D g2 = (Graphics2D) g.create();
+			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			int w = getWidth(), h = getHeight();
+			g2.setColor(tile.done ? GOLD_WASH : ColorScheme.DARKER_GRAY_COLOR);
+			g2.fillRoundRect(0, 0, w, h, 6, 6);
+			g2.setColor(tile.done ? GOLD : HAIR);
+			g2.drawRoundRect(0, 0, w - 1, h - 1, 6, 6);
+			if (picture != null)
+			{
+				if (!tile.done)
+				{
+					g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.55f));
+				}
+				picture.paintIcon(this, g2, (w - picture.getIconWidth()) / 2, (h - picture.getIconHeight()) / 2);
+				g2.setComposite(AlphaComposite.SrcOver);
+			}
+			if (tile.done)
+			{
+				new Check(DONE).paintIcon(this, g2, w - 11, 2);
+			}
+			g2.dispose();
+		}
+	}
+
+	/** A skill by its name in the feed ("Slayer", any case), or null for one this client doesn't know. */
+	private static Skill skill(String name)
+	{
+		for (Skill s : Skill.values())
+		{
+			if (s.getName().equalsIgnoreCase(name))
+			{
+				return s;
+			}
+		}
+		return null;
 	}
 
 	/** A stop in the one run over every kind of patch: its number, the place, and the teleport to use (null: all excluded). */
@@ -1794,13 +1957,10 @@ class GoalsPanel extends PluginPanel
 		return i;
 	}
 
-	private static JLabel note(String text)
+	/** A quiet line of text in the list, wrapped to the panel so a long one is never cut short. */
+	private static JComponent note(String text)
 	{
-		JLabel l = new JLabel(text);
-		l.setFont(BODY);
-		l.setForeground(MUTED);
-		l.setBorder(new EmptyBorder(4, 2, 4, 2));
-		return l;
+		return new Wrap(text, BODY, MUTED, PluginPanel.PANEL_WIDTH - 24, 0);
 	}
 
 	/** A plain row (a farm region): its crop's icon, a title, a status on the right in its state's colour. */
@@ -3021,6 +3181,32 @@ class GoalsPanel extends PluginPanel
 			g2.draw(p);
 			g2.dispose();
 		}
+	}
+
+	/**
+	 * The Bingo tab's picture: a small chequerboard, gold and cream squares, drawn here (there's no board item in the
+	 * game, and the Games Room logo is a website picture, not one the client has). An image, so the tab can dim it.
+	 */
+	static BufferedImage chequerboard(int size)
+	{
+		int n = 4, cell = (size - 2) / n, side = cell * n, at = (size - side) / 2;
+		BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g = img.createGraphics();
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		g.setColor(WELL);
+		g.fillRoundRect(at - 1, at - 1, side + 2, side + 2, 4, 4);
+		for (int r = 0; r < n; r++)
+		{
+			for (int c = 0; c < n; c++)
+			{
+				g.setColor((r + c) % 2 == 0 ? GOLD : INK);
+				g.fillRect(at + c * cell, at + r * cell, cell, cell);
+			}
+		}
+		g.setColor(GOLD_DEEP);
+		g.drawRoundRect(at - 1, at - 1, side + 1, side + 1, 4, 4);
+		g.dispose();
+		return img;
 	}
 
 	/** A small ✓ before a done or ready value, in the value's colour. Drawn, as the RuneScape fonts have none. */

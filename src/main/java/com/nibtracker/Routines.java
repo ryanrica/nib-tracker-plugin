@@ -146,6 +146,72 @@ final class Routines
 		}
 	}
 
+	/** A live bingo board of the player's group: its name, size (3 to 5 a side) and tiles, as Nib Tracker sends them. */
+	static final class Board
+	{
+		final String id;
+		final String name;
+		final int size;
+		/* size * size slots, row by row; a slot the feed didn't fill is null. */
+		final Tile[] tiles;
+
+		Board(String id, String name, int size)
+		{
+			this.id = id;
+			this.name = name;
+			this.size = size;
+			this.tiles = new Tile[size * size];
+		}
+	}
+
+	/** A tile: what it asks for, its picture (an item, or a skill for an XP tile), and whether the team has it. */
+	static final class Tile
+	{
+		final String label;
+		final int itemId;
+		final String skill;
+		final boolean done;
+
+		Tile(String label, int itemId, String skill, boolean done)
+		{
+			this.label = label;
+			this.itemId = itemId;
+			this.skill = skill;
+			this.done = done;
+		}
+	}
+
+	/** Up to 3 boards: each 3 to 5 a side (bigger ones don't fit the panel), tiles placed by idx; anything out of range is left out. */
+	static List<Board> bingo(JsonElement e)
+	{
+		List<Board> out = new ArrayList<>();
+		for (JsonObject o : objects(e, 3))
+		{
+			int size = (int) num(o, "size");
+			String name = str(o, "name");
+			if (size < 3 || size > 5 || name.isEmpty())
+			{
+				continue;
+			}
+			// The id goes into the board's link, so only a plain one (letters, digits, dashes) is kept.
+			String id = str(o, "id").matches("[A-Za-z0-9-]{1,40}") ? str(o, "id") : "";
+			Board b = new Board(id, name.length() > 60 ? name.substring(0, 60) : name, size);
+			for (JsonObject t : objects(o.get("tiles"), 25))
+			{
+				int idx = (int) num(t, "idx");
+				String label = str(t, "label");
+				if (idx >= 0 && idx < b.tiles.length && !label.isEmpty() && t.has("idx"))
+				{
+					JsonElement done = t.get("done");
+					b.tiles[idx] = new Tile(label.length() > 80 ? label.substring(0, 80) : label, (int) num(t, "itemId"), str(t, "skill"),
+						done != null && done.isJsonPrimitive() && done.getAsJsonPrimitive().isBoolean() && done.getAsBoolean());
+				}
+			}
+			out.add(b);
+		}
+		return out;
+	}
+
 	static List<Stop> route(JsonElement e)
 	{
 		List<Stop> out = new ArrayList<>();
