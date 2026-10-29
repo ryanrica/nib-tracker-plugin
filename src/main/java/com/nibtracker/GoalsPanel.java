@@ -175,6 +175,9 @@ class GoalsPanel extends PluginPanel
 	private static final String DAILIES = "Daily tasks";
 	private static final String FARMING = "Farming";
 	private static final String BINGO = "Bingo";
+	/* Quests and achievement diaries share one tab, each under its own sub-heading. */
+	private static final String QUESTS_DIARIES = "Quests & diaries";
+	private static final List<String> QUESTS_DIARIES_PARTS = Arrays.asList("Quests", "Achievement diaries");
 	private static final String OVERVIEW = "Overview";
 	private static final String ALL = "All";
 	/* The Farming tab's group chips, in order, before its kind chips (Favourites is drawn with a ★ in front). */
@@ -190,8 +193,8 @@ class GoalsPanel extends PluginPanel
 	private static final List<String> FARM_GROUPS = Arrays.asList(ALL_PATCHES, FAVOURITES, RUN_ORDER, SPECIAL, ALL_TREES, CONTRACT);
 	/* The tabs, four to a row: Overview, Skills, Quests, Achievement diaries; then Farming, Combat achievements,
 	   Collection log, Daily tasks; anything else after. */
-	private static final List<String> TAB_ORDER = Arrays.asList("Overview", "Skills", "Quests", "Achievement diaries",
-		"Farming", "Combat achievements", "Collection log", "Daily tasks", "Bingo", "Bosses", "Items", "Other");
+	private static final List<String> TAB_ORDER = Arrays.asList("Overview", "Skills", QUESTS_DIARIES, "Bingo",
+		"Farming", "Combat achievements", "Collection log", "Daily tasks", "Bosses", "Items", "Other");
 	/* Sub-filter values in the order they're offered. */
 	private static final List<String> TAG_ORDER = Arrays.asList("Easy", "Medium", "Hard", "Elite", "Master", "Grandmaster", "Not started", "In progress");
 	private static final BufferedImage LOGO = ImageUtil.loadImageResource(GoalsPanel.class, "goals_icon.png");
@@ -363,13 +366,11 @@ class GoalsPanel extends PluginPanel
 		views.add(OVERVIEW);
 		views.addAll(Arrays.asList(GoalProgress.CATEGORIES));
 		views.removeAll(Arrays.asList("Bosses", "Items", "Other"));
+		views.removeAll(QUESTS_DIARIES_PARTS);
+		views.add(QUESTS_DIARIES);
 		views.add(DAILIES);
 		views.add(FARMING);
-		// Only for a player on a live board: everyone else would have an empty tab on a row of its own.
-		if (!extras.boards.isEmpty())
-		{
-			views.add(BINGO);
-		}
+		views.add(BINGO);
 		views.sort(Comparator.comparingInt(v -> TAB_ORDER.indexOf(v) < 0 ? TAB_ORDER.size() : TAB_ORDER.indexOf(v)));
 		if (!views.contains(view))
 		{
@@ -477,7 +478,7 @@ class GoalsPanel extends PluginPanel
 		}
 		else
 		{
-			categoryView(view, layout);
+			categoryView(QUESTS_DIARIES.equals(view) ? QUESTS_DIARIES_PARTS : Collections.singletonList(view), layout);
 		}
 		// The header's grid layout keeps room for hidden components, so hidden chips are removed, not just hidden;
 		// otherwise leaving Farming left a blank block the size of its chips under the tabs.
@@ -620,7 +621,7 @@ class GoalsPanel extends PluginPanel
 			tab.icon(new ImageIcon(fitTo(skillIcons.getSkillImage(skill, false), 26)));
 			return;
 		}
-		int item = "Skills".equals(v) ? ItemID.SKILLCAPE_MAX : fallbackItem(v);
+		int item = "Skills".equals(v) ? ItemID.SKILLCAPE_MAX : fallbackItem(QUESTS_DIARIES.equals(v) ? "Quests" : v);
 		if (item > 0 && itemManager != null)
 		{
 			itemIcon(item, 28, tab::icon);
@@ -713,7 +714,9 @@ class GoalsPanel extends PluginPanel
 	private void filters(List<String> options, Map<String, Integer> iconItems, Map<String, Icon> fixedIcons, String byDefault)
 	{
 		filters.removeAll();
-		filters.setLayout(new GridLayout(0, iconItems.isEmpty() && fixedIcons.isEmpty() ? 3 : 2, 4, 4));
+		// Three short chips to a row (All, Due, Done); two when any has an icon or a longer label (Not started, Elite...).
+		boolean short3 = iconItems.isEmpty() && fixedIcons.isEmpty() && options.stream().allMatch(o -> o.length() <= 5);
+		filters.setLayout(new GridLayout(0, short3 ? 3 : 2, 4, 4));
 		String first = options.contains(byDefault) ? byDefault : options.isEmpty() ? ALL : options.get(0);
 		String current = filter.getOrDefault(view, first);
 		if (!options.contains(current))
@@ -765,13 +768,14 @@ class GoalsPanel extends PluginPanel
 	}
 
 	/** One kind of goal on its own: all of them (no "Show more"), filtered by tier or state where that applies. */
-	private void categoryView(String category, GoalLayout.Layout layout)
+	private void categoryView(List<String> categories, GoalLayout.Layout layout)
 	{
-		List<GoalLayout.Group> open = layout.sections.getOrDefault(category, Collections.emptyList());
+		List<GoalLayout.Group> open = new ArrayList<>();
+		categories.forEach(c -> open.addAll(layout.sections.getOrDefault(c, Collections.emptyList())));
 		List<GoalLayout.Group> finished = new ArrayList<>();
 		for (GoalLayout.Group g : layout.completed)
 		{
-			if (category.equals(g.main.category))
+			if (categories.contains(g.main.category))
 			{
 				finished.add(g);
 			}
@@ -788,18 +792,28 @@ class GoalsPanel extends PluginPanel
 		filters(tags);
 		String f = currentFilter();
 		// Skills starts with the current Slayer task, a row of its own above the skills.
-		Row task = "Skills".equals(category) ? slayerTask() : null;
+		Row task = categories.contains("Skills") ? slayerTask() : null;
 		if (task != null)
 		{
 			list.add(card(goalCard(task, task.progress, task.detail)));
 		}
-		// Favourites stay where they are here (★ on the row); Overview is where they're gathered.
-		for (GoalLayout.Group g : open)
+		// Favourites stay where they are here (★ on the row); Overview is where they're gathered. A shared tab (Quests &
+		// diaries) puts each kind under its own sub-heading.
+		for (String c : categories)
 		{
-			if (ALL.equals(f) || f.equals(g.main.tag))
+			List<GoalLayout.Group> shown = new ArrayList<>();
+			for (GoalLayout.Group g : open)
 			{
-				group(g);
+				if (c.equals(g.main.category) && (ALL.equals(f) || f.equals(g.main.tag)))
+				{
+					shown.add(g);
+				}
 			}
+			if (categories.size() > 1 && !shown.isEmpty())
+			{
+				list.add(subHeader(c, shown.size()));
+			}
+			shown.forEach(this::group);
 		}
 		List<GoalLayout.Group> shownDone = new ArrayList<>();
 		for (GoalLayout.Group g : finished)
@@ -868,6 +882,18 @@ class GoalsPanel extends PluginPanel
 	 */
 	private void bingoView(Extras x)
 	{
+		if (x.boards.isEmpty())
+		{
+			list.add(note("No live bingo board. Make one or join a group's board in Nib Tracker."));
+			JLabel open = new JLabel("Open Bingo in Nib Tracker");
+			open.setFont(BODY);
+			open.setForeground(GOLD);
+			open.setBorder(new EmptyBorder(0, 2, 4, 2));
+			open.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			onClick(open, () -> LinkBrowser.browse(NibTrackerApi.SITE + "/#bingo"));
+			list.add(open);
+			return;
+		}
 		for (Routines.Board b : x.boards)
 		{
 			String key = "bingo:" + b.id;
@@ -1931,13 +1957,10 @@ class GoalsPanel extends PluginPanel
 		return i;
 	}
 
-	private static JLabel note(String text)
+	/** A quiet line of text in the list, wrapped to the panel so a long one is never cut short. */
+	private static JComponent note(String text)
 	{
-		JLabel l = new JLabel(text);
-		l.setFont(BODY);
-		l.setForeground(MUTED);
-		l.setBorder(new EmptyBorder(4, 2, 4, 2));
-		return l;
+		return new Wrap(text, BODY, MUTED, PluginPanel.PANEL_WIDTH - 24, 0);
 	}
 
 	/** A plain row (a farm region): its crop's icon, a title, a status on the right in its state's colour. */

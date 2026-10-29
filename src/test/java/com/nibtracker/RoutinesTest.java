@@ -112,7 +112,7 @@ public class RoutinesTest
 				+ "{\"idx\":0,\"label\":\"Tanzanite fang\",\"itemId\":12922,\"done\":true},"
 				+ "{\"idx\":4,\"label\":\"80 Slayer\",\"skill\":\"Slayer\"},"
 				+ "{\"idx\":9,\"label\":\"Off the board\"},{\"label\":\"No idx\"}]},"
-				+ "{\"name\":\"Too big\",\"size\":8},{\"name\":\"\",\"size\":4}]"));
+				+ "{\"name\":\"Too big\",\"size\":6},{\"name\":\"\",\"size\":4}]"));
 		assertEquals(1, b.size());
 		assertEquals(9, b.get(0).tiles.length);
 		assertEquals("Tanzanite fang", b.get(0).tiles[0].label);

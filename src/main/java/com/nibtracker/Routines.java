@@ -146,7 +146,7 @@ final class Routines
 		}
 	}
 
-	/** A live bingo board of the player's group: its name, size (3 to 7 a side) and tiles, as Nib Tracker sends them. */
+	/** A live bingo board of the player's group: its name, size (3 to 5 a side) and tiles, as Nib Tracker sends them. */
 	static final class Board
 	{
 		final String id;
@@ -181,7 +181,7 @@ final class Routines
 		}
 	}
 
-	/** Up to 3 boards: each 3 to 7 a side, its tiles placed by idx; anything out of range is left out. */
+	/** Up to 3 boards: each 3 to 5 a side (bigger ones don't fit the panel), tiles placed by idx; anything out of range is left out. */
 	static List<Board> bingo(JsonElement e)
 	{
 		List<Board> out = new ArrayList<>();
@@ -189,14 +189,14 @@ final class Routines
 		{
 			int size = (int) num(o, "size");
 			String name = str(o, "name");
-			if (size < 3 || size > 7 || name.isEmpty())
+			if (size < 3 || size > 5 || name.isEmpty())
 			{
 				continue;
 			}
 			// The id goes into the board's link, so only a plain one (letters, digits, dashes) is kept.
 			String id = str(o, "id").matches("[A-Za-z0-9-]{1,40}") ? str(o, "id") : "";
 			Board b = new Board(id, name.length() > 60 ? name.substring(0, 60) : name, size);
-			for (JsonObject t : objects(o.get("tiles"), 49))
+			for (JsonObject t : objects(o.get("tiles"), 25))
 			{
 				int idx = (int) num(t, "idx");
 				String label = str(t, "label");
