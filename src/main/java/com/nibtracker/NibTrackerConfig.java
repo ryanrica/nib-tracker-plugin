@@ -159,6 +159,12 @@ public interface NibTrackerConfig extends Config
 		return OverlaySize.SMALL;
 	}
 
+	@ConfigItem(keyName = "overlayFavouriteTitles", name = "Favourites titles on screen", description = "Show the title line (\"★ Farming favourites · 6 ready\") above each favourites box you put on the game screen", section = goals, position = 35)
+	default boolean overlayFavouriteTitles()
+	{
+		return true;
+	}
+
 	@ConfigItem(keyName = "dailiesPanel", name = "Daily tasks in the panel", description = "List the daily tasks you've switched on in Nib Tracker, and tick them off from the Goals panel", section = goals, position = 36)
 	default boolean dailiesPanel()
 	{

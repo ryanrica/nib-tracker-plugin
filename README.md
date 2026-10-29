@@ -54,7 +54,7 @@ To keep an eye on a goal while you play, right-click it in the panel and choose 
 farming, or one kind of patch (just herbs, say) can go on screen the same way. The on-screen card shows each with its
 icon, name, value ("82/83", "2 ready"), a progress bar and a line on what's next (the XP left, a combat achievement's
 task, the herb run's teleports in order); hover for everything. Choose **Compact** under **Goals** in the plugin settings
-for just icons and numbers. Finished goals, and daily tasks once they're all done, leave the screen by themselves, so you
+for just icons and numbers, and turn off **Favourites titles on screen** to drop the title line above favourites boxes. Finished goals, and daily tasks once they're all done, leave the screen by themselves, so you
 can leave it on. Hold Alt to move it, and pick the size in the settings too. Right-click again to take something off.
 
 Finished daily tasks get the same pop-up and chat message as goals.

@@ -131,9 +131,12 @@ class GoalOverlay extends Overlay
 			}
 		}
 		List<Box> out = new ArrayList<>();
+		boolean favouriteTitles = config.overlayFavouriteTitles();
 		for (Map.Entry<String, List<Entry>> b : boxes(entries))
 		{
-			out.add(new Box(heading(b.getKey(), b.getValue()), b.getValue()));
+			// A favourites box can go without its "★ Farming favourites · 6 ready" title (the plugin setting).
+			String title = !favouriteTitles && b.getKey().startsWith(STAR) ? null : heading(b.getKey(), b.getValue());
+			out.add(new Box(title, b.getValue()));
 		}
 		this.boxes = Collections.unmodifiableList(out);
 	}
