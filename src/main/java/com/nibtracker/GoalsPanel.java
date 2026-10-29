@@ -191,10 +191,10 @@ class GoalsPanel extends PluginPanel
 	/* After the kind chips: whether each spirit tree spot has a tree (never a farm timer). */
 	private static final String SPIRIT_TREES = "Spirit trees";
 	private static final List<String> FARM_GROUPS = Arrays.asList(ALL_PATCHES, FAVOURITES, RUN_ORDER, SPECIAL, ALL_TREES, CONTRACT);
-	/* The tabs, four to a row: Overview, Skills, Quests, Achievement diaries; then Farming, Combat achievements,
-	   Collection log, Daily tasks; anything else after. */
+	/* The tabs, four to a row: Overview, Skills, Quests & diaries, Bingo; then Farming, Combat achievements, Collection
+	   log, Daily tasks. */
 	private static final List<String> TAB_ORDER = Arrays.asList("Overview", "Skills", QUESTS_DIARIES, "Bingo",
-		"Farming", "Combat achievements", "Collection log", "Daily tasks", "Bosses", "Items", "Other");
+		"Farming", "Combat achievements", "Collection log", "Daily tasks");
 	/* Sub-filter values in the order they're offered. */
 	private static final List<String> TAG_ORDER = Arrays.asList("Easy", "Medium", "Hard", "Elite", "Master", "Grandmaster", "Not started", "In progress");
 	private static final BufferedImage LOGO = ImageUtil.loadImageResource(GoalsPanel.class, "goals_icon.png");

@@ -15,6 +15,7 @@ public class ServerWatchTest
 	public void aNoticeIsOnlyOneOfThePluginsOwn()
 	{
 		assertTrue(GoalTracker.noticeText(new JsonParser().parse("\"update\"")).contains("Plugin Hub"));
+		assertTrue(GoalTracker.noticeText(new JsonParser().parse("\"news\"")).contains("Open it"));
 		// Free text, an unknown code, or none at all shows nothing.
 		assertEquals("", GoalTracker.noticeText(new JsonParser().parse("\"Visit evil.example for free gold\"")));
 		assertEquals("", GoalTracker.noticeText(new JsonParser().parse("{\"code\":\"update\"}")));
