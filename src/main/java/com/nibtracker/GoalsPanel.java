@@ -605,10 +605,9 @@ class GoalsPanel extends PluginPanel
 			itemIcon(ItemID.GIANT_STOPWATCH, 28, tab::icon);
 			return;
 		}
-		if (BINGO.equals(v) && itemManager != null)
+		if (BINGO.equals(v))
 		{
-			// Swords and emblem (g), from the grid master bingo rewards.
-			itemIcon(ItemID.BINGO_SWORDS_GREEN, 28, tab::icon);
+			tab.icon(new ImageIcon(chequerboard(24)));
 			return;
 		}
 		if ("Combat achievements".equals(v))
@@ -3182,6 +3181,32 @@ class GoalsPanel extends PluginPanel
 			g2.draw(p);
 			g2.dispose();
 		}
+	}
+
+	/**
+	 * The Bingo tab's picture: a small chequerboard, gold and cream squares, drawn here (there's no board item in the
+	 * game, and the Games Room logo is a website picture, not one the client has). An image, so the tab can dim it.
+	 */
+	static BufferedImage chequerboard(int size)
+	{
+		int n = 4, cell = (size - 2) / n, side = cell * n, at = (size - side) / 2;
+		BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g = img.createGraphics();
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		g.setColor(WELL);
+		g.fillRoundRect(at - 1, at - 1, side + 2, side + 2, 4, 4);
+		for (int r = 0; r < n; r++)
+		{
+			for (int c = 0; c < n; c++)
+			{
+				g.setColor((r + c) % 2 == 0 ? GOLD : INK);
+				g.fillRect(at + c * cell, at + r * cell, cell, cell);
+			}
+		}
+		g.setColor(GOLD_DEEP);
+		g.drawRoundRect(at - 1, at - 1, side + 1, side + 1, 4, 4);
+		g.dispose();
+		return img;
 	}
 
 	/** A small ✓ before a done or ready value, in the value's colour. Drawn, as the RuneScape fonts have none. */
