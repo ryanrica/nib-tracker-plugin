@@ -69,7 +69,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	private static final long MAX_BACKOFF_MS = 5 * 60_000L;
 	/* What this build supports beyond the basics, sent with snapshot_character: add one with each new server-driven feature. */
 	private static final List<String> CAPABILITIES = Arrays.asList("potion_storage", "bank_tabs", "clog_lines",
-		"watch_vars", "watch_containers", "notice");
+		"watch_vars", "watch_containers", "notice", "bingo", "farm_route", "ge_empty");
 	/* IRONMAN varbit value -> the account modes the web app uses. */
 	private static final String[] ACCOUNT_TYPES = {"main", "ironman", "ultimate", "hardcore", "group", "group", "group"};
 

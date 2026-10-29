@@ -5,6 +5,8 @@ import java.util.HashMap;
 import java.util.Map;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.events.GrandExchangeOfferChanged;
@@ -20,6 +22,9 @@ import net.runelite.client.game.ItemManager;
 @Singleton
 class GrandExchangeTracker
 {
+	@Inject
+	private Client client;
+
 	@Inject
 	private ItemManager itemManager;
 
@@ -61,6 +66,12 @@ class GrandExchangeTracker
 			return;
 		}
 		GrandExchangeOfferState state = o.getState();
+		// While hopping or logging in the client clears every slot before the real offers arrive; those empties aren't
+		// real, so only an empty seen while logged in is sent (as RuneLite's own Grand Exchange plugin does).
+		if (state == GrandExchangeOfferState.EMPTY && client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
 		String key = state + ":" + o.getItemId() + ":" + o.getQuantitySold() + ":" + o.getPrice() + ":" + o.getTotalQuantity();
 		if (key.equals(lastBySlot.put(e.getSlot(), key)))
 		{

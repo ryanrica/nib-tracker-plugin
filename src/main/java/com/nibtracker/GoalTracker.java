@@ -162,6 +162,8 @@ class GoalTracker
 		NOTICES.put("update", "A newer Nib Tracker plugin is out. Update it from the Plugin Hub to keep everything syncing.");
 		NOTICES.put("key_revoked", "Your plugin key no longer works. Make a new one on Nib Tracker's Account page and paste it in this plugin's settings.");
 		NOTICES.put("maintenance", "Nib Tracker is down for maintenance. Nothing is lost: what you do is sent once it's back.");
+		// For anything else Nib Tracker wants to say: points to the site, where the words can be anything.
+		NOTICES.put("news", "There's news for you on Nib Tracker. Open it to see.");
 	}
 	/* Icons for the on-screen goals, and item ids found by name, so each is looked up once. */
 	private final Map<String, BufferedImage> overlayIcons = new HashMap<>();
