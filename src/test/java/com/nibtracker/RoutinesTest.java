@@ -122,6 +122,9 @@ public class RoutinesTest
 		// Empty slots, a tile past the board and one with no idx are left out.
 		assertEquals(null, b.get(0).tiles[1]);
 		assertEquals(2, java.util.Arrays.stream(b.get(0).tiles).filter(java.util.Objects::nonNull).count());
+		assertEquals("a", b.get(0).id);
+		// An id that isn't plain is dropped, as it goes into a link.
+		assertEquals("", Routines.bingo(new JsonParser().parse("[{\"id\":\"x/../y\",\"name\":\"B\",\"size\":3}]")).get(0).id);
 		assertTrue(Routines.bingo(null).isEmpty());
 	}
 }

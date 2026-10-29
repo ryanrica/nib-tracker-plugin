@@ -886,7 +886,7 @@ class GoalsPanel extends PluginPanel
 			grid.setOpaque(false);
 			for (Routines.Tile t : b.tiles)
 			{
-				grid.add(new BingoTile(t, b.size));
+				grid.add(new BingoTile(t, b.size, b.id));
 			}
 			list.add(grid);
 			list.add(new Wrap(done + " of " + tiles + " tiles done. Click a tile to open the board in Nib Tracker.", BODY, MUTED,
@@ -904,7 +904,7 @@ class GoalsPanel extends PluginPanel
 		private final int side;
 		private Icon picture;
 
-		BingoTile(Routines.Tile tile, int size)
+		BingoTile(Routines.Tile tile, int size, String boardId)
 		{
 			this.tile = tile;
 			// The panel's width shared between the tiles and the 3px gaps, for a square tile at any board size.
@@ -932,7 +932,8 @@ class GoalsPanel extends PluginPanel
 			}
 			setToolTipText("<html>" + escape(tile.label) + (tile.done ? "<br>Done" : "") + "<br>Click to open the board in Nib Tracker</html>");
 			setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-			onClick(this, () -> LinkBrowser.browse(NibTrackerApi.SITE + "/#bingo"));
+			// Straight to this board; the bingo page when the board has no usable id.
+			onClick(this, () -> LinkBrowser.browse(NibTrackerApi.SITE + "/#bingo" + (boardId.isEmpty() ? "" : "/" + boardId)));
 		}
 
 		@Override

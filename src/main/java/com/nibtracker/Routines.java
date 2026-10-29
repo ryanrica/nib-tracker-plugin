@@ -193,7 +193,9 @@ final class Routines
 			{
 				continue;
 			}
-			Board b = new Board(str(o, "id"), name.length() > 60 ? name.substring(0, 60) : name, size);
+			// The id goes into the board's link, so only a plain one (letters, digits, dashes) is kept.
+			String id = str(o, "id").matches("[A-Za-z0-9-]{1,40}") ? str(o, "id") : "";
+			Board b = new Board(id, name.length() > 60 ? name.substring(0, 60) : name, size);
 			for (JsonObject t : objects(o.get("tiles"), 49))
 			{
 				int idx = (int) num(t, "idx");
