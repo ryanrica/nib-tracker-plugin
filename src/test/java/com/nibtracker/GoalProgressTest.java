@@ -188,9 +188,9 @@ public class GoalProgressTest
 	@Test
 	public void goalLinks()
 	{
-		assertEquals("https://buntracker.pages.dev/#goal=gabc123&c=Kimchi%20Bun",
+		assertEquals("https://nibtracker.com/#goal=gabc123&c=Kimchi%20Bun",
 			GoalTracker.link(goal("{\"id\":\"gabc123\",\"type\":\"kc\",\"params\":{\"boss\":\"vorkath\",\"count\":100}}"), "Kimchi Bun"));
-		assertEquals("https://buntracker.pages.dev/#goal=a%26b", GoalTracker.link(goal("{\"id\":\"a&b\",\"type\":\"custom\"}"), null));
+		assertEquals("https://nibtracker.com/#goal=a%26b", GoalTracker.link(goal("{\"id\":\"a&b\",\"type\":\"custom\"}"), null));
 		assertEquals("https://oldschool.runescape.wiki/w/Dragon_Slayer_I%2FQuick_guide",
 			GoalTracker.link(goal("{\"id\":\"q\",\"type\":\"quest\",\"params\":{\"quest\":\"Dragon Slayer I\"}}"), "Kimchi Bun"));
 		assertEquals("https://oldschool.runescape.wiki/w/Kourend_%26_Kebos_Diary",

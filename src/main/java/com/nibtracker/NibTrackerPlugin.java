@@ -169,6 +169,8 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	private final AtomicBoolean inFlight = new AtomicBoolean();
 	private volatile long nextSendAt;
 	private volatile long backoffMs;
+	/* How many events a batch may hold; smaller for a while after the server says one is too big. */
+	private volatile int batchLimit = BATCH;
 	private volatile long lastSentAt;
 	/* When settings last came from the server; if nothing has been sent for a while they're asked for again. */
 	private volatile long settingsAt;
@@ -802,7 +804,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		List<Pending> batch = new ArrayList<>();
 		Pending p;
-		while (batch.size() < BATCH && (p = queue.peekFirst()) != null && p.who == first.who)
+		while (batch.size() < batchLimit && (p = queue.peekFirst()) != null && p.who == first.who)
 		{
 			batch.add(queue.pollFirst());
 		}
@@ -820,6 +822,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			{
 				backoffMs = 0;
 				nextSendAt = 0;
+				batchLimit = BATCH;
 				List<String> ids = new ArrayList<>();
 				batch.forEach(x -> ids.add(x.ev.get("id").getAsString()));
 				screenshots.eventsDelivered(ids);
@@ -838,6 +841,28 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 				chat(problem(r));
 				return;
 			}
+			if ("bad_request".equals(err))
+			{
+				// The server will never take this batch, so drop it rather than block the queue behind it.
+				log.debug("Nib Tracker dropped {} events the server refused", batch.size());
+				return;
+			}
+			if ("too_big".equals(err) || "batch_too_big".equals(err))
+			{
+				batchLimit = smallerBatch(batch.size());
+				if (batchLimit == 0)
+				{
+					// One event alone is over the limit; it can never be sent, so it mustn't hold up the rest.
+					log.debug("Nib Tracker dropped a {} event too big to send", batch.get(0).ev.get("type"));
+					batchLimit = BATCH;
+					return;
+				}
+				for (int i = batch.size() - 1; i >= 0; i--)
+				{
+					queue.addFirst(batch.get(i));
+				}
+				return;
+			}
 			// Network trouble, rate limit or a server error: put the batch back and wait longer each time.
 			for (int i = batch.size() - 1; i >= 0; i--)
 			{
@@ -849,6 +874,12 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	}
 
 	// ------------------------------------------------------------ helpers
+
+	/** After the server says a batch of {@code sent} events is too big: how many the next may hold, or 0 to drop it. */
+	static int smallerBatch(int sent)
+	{
+		return sent > 1 ? sent / 2 : 0;
+	}
 
 	/** Which server "send" switch covers a chat event type. */
 	private static String sourceOf(String type)

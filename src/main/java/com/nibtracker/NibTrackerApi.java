@@ -18,57 +18,55 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 /**
- * Calls the two Supabase functions the plugin is allowed to use (supabase/plugin.sql).
- * Every call runs on OkHttp's thread pool; callbacks get the parsed reply, or null when the call failed.
+ * Calls Nib Tracker's plugin API v1 (hello, ingest, screenshot) on the site itself.
+ * Every call runs on OkHttp's thread pool; callbacks get the parsed reply, or null when the call failed and is worth
+ * trying again. A 400 (a call that can never succeed) comes back as a reply with {@code error: "bad_request"}, and a
+ * 413 (body over the limit) as one with {@code error: "too_big"}.
  */
 @Slf4j
 @Singleton
 class NibTrackerApi
 {
 	/* Must match runelite-plugin.properties (NibTrackerApiTest checks), so the server can tell releases apart. */
-	static final String VERSION = "0.7.0";
+	static final String VERSION = "0.8.0";
 
-	/* The Supabase project address and its publishable key. Both are public by design (they're in the web app too);
-	   the server checks the plugin key on every call. */
-	private static final String BASE = "https://adndcxzfizabkuiwuzwq.supabase.co/rest/v1/rpc/";
-	private static final String PUBLISHABLE_KEY = "sb_publishable_mrNOgXJ1KVgcKHjr0ucfWQ_IpI0YQqT";
-	/* The Nib Tracker web app. Goal links in the panel open it; screenshots go to it because only it holds the key that
-	   may write to storage. */
-	static final String SITE = "https://buntracker.pages.dev";
-	private static final String SCREENSHOT_URL = SITE + "/api/plugin/screenshot";
+	/* The Nib Tracker web app. Goal links in the panel open it, and the plugin API lives on it; the server checks the
+	   plugin key on every call. */
+	static final String SITE = "https://nibtracker.com";
+	private static final String BASE = SITE + "/api/plugin/v1/";
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 	private static final MediaType JPEG = MediaType.parse("image/jpeg");
 
-	@Inject
-	private OkHttpClient http;
+	private final OkHttpClient http;
+	private final Gson gson;
 
 	@Inject
-	private Gson gson;
+	NibTrackerApi(OkHttpClient http, Gson gson)
+	{
+		this.http = http;
+		this.gson = gson;
+	}
 
 	void hello(String key, JsonObject who, Consumer<JsonObject> done)
 	{
 		JsonObject body = new JsonObject();
-		body.addProperty("p_key", key);
-		body.addProperty("p_version", VERSION);
-		body.add("p_who", who);
-		post("bt_plugin_hello", body, done);
+		body.add("who", who);
+		post("hello", key, body, done);
 	}
 
 	void ingest(String key, JsonObject who, JsonArray events, Consumer<JsonObject> done)
 	{
 		JsonObject body = new JsonObject();
-		body.addProperty("p_key", key);
-		body.addProperty("p_version", VERSION);
-		body.add("p_who", who);
-		body.add("p_events", events);
-		post("bt_plugin_ingest", body, done);
+		body.add("who", who);
+		body.add("events", events);
+		post("ingest", key, body, done);
 	}
 
 	/** Uploads a drop tile proof picture for an event the server already has. Fire and forget. */
 	void uploadScreenshot(String key, String eventId, byte[] jpeg)
 	{
 		Request req = new Request.Builder()
-			.url(SCREENSHOT_URL)
+			.url(BASE + "screenshot")
 			.header("X-BT-Key", key)
 			.header("X-BT-Event", eventId)
 			.header("X-BT-Plugin-Version", VERSION)
@@ -90,11 +88,11 @@ class NibTrackerApi
 		});
 	}
 
-	private void post(String fn, JsonObject body, Consumer<JsonObject> done)
+	private void post(String fn, String key, JsonObject body, Consumer<JsonObject> done)
 	{
 		Request req = new Request.Builder()
 			.url(BASE + fn)
-			.header("apikey", PUBLISHABLE_KEY)
+			.header("X-BT-Key", key)
 			.header("X-BT-Plugin-Version", VERSION)
 			.post(RequestBody.create(JSON, gson.toJson(body)))
 			.build();
@@ -115,7 +113,21 @@ class NibTrackerApi
 				JsonObject reply = null;
 				try (ResponseBody rb = res.body())
 				{
-					if (!res.isSuccessful() || rb == null)
+					if (res.code() == 400)
+					{
+						// The call breaks the API's rules, so sending it again would never work.
+						log.debug("Nib Tracker {} refused the call: {}", fn, rb == null ? "" : rb.string());
+						reply = new JsonObject();
+						reply.addProperty("ok", false);
+						reply.addProperty("error", "bad_request");
+					}
+					else if (res.code() == 413)
+					{
+						reply = new JsonObject();
+						reply.addProperty("ok", false);
+						reply.addProperty("error", "too_big");
+					}
+					else if (!res.isSuccessful() || rb == null)
 					{
 						log.debug("Nib Tracker {} returned HTTP {}", fn, res.code());
 					}
