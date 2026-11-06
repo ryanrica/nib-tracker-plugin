@@ -20,7 +20,8 @@ import okhttp3.ResponseBody;
 /**
  * Calls Nib Tracker's plugin API v1 (hello, ingest, screenshot) on the site itself.
  * Every call runs on OkHttp's thread pool; callbacks get the parsed reply, or null when the call failed and is worth
- * trying again. A 400 (a call that can never succeed) comes back as its reply, with {@code error: "bad_request"}.
+ * trying again. A 400 (a call that can never succeed) comes back as a reply with {@code error: "bad_request"}, and a
+ * 413 (body over the limit) as one with {@code error: "too_big"}.
  */
 @Slf4j
 @Singleton
@@ -36,11 +37,15 @@ class NibTrackerApi
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 	private static final MediaType JPEG = MediaType.parse("image/jpeg");
 
-	@Inject
-	private OkHttpClient http;
+	private final OkHttpClient http;
+	private final Gson gson;
 
 	@Inject
-	private Gson gson;
+	NibTrackerApi(OkHttpClient http, Gson gson)
+	{
+		this.http = http;
+		this.gson = gson;
+	}
 
 	void hello(String key, JsonObject who, Consumer<JsonObject> done)
 	{
@@ -115,6 +120,12 @@ class NibTrackerApi
 						reply = new JsonObject();
 						reply.addProperty("ok", false);
 						reply.addProperty("error", "bad_request");
+					}
+					else if (res.code() == 413)
+					{
+						reply = new JsonObject();
+						reply.addProperty("ok", false);
+						reply.addProperty("error", "too_big");
 					}
 					else if (!res.isSuccessful() || rb == null)
 					{
