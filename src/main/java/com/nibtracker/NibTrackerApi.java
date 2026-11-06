@@ -28,7 +28,7 @@ import okhttp3.ResponseBody;
 class NibTrackerApi
 {
 	/* Must match runelite-plugin.properties (NibTrackerApiTest checks), so the server can tell releases apart. */
-	static final String VERSION = "0.7.0";
+	static final String VERSION = "0.8.0";
 
 	/* The Nib Tracker web app. Goal links in the panel open it, and the plugin API lives on it; the server checks the
 	   plugin key on every call. */
