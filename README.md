@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/ryanrica/nib-tracker-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/ryanrica/nib-tracker-plugin/actions/workflows/build.yml)
 
-Syncs your own Old School RuneScape progress to your [Nib Tracker](https://buntracker.pages.dev) planner, so goals,
+Syncs your own Old School RuneScape progress to your [Nib Tracker](https://nibtracker.com) planner, so goals,
 points, slayer, farming, pet luck and bingo tiles update without typing anything in.
 
 ## Setup
@@ -105,7 +105,7 @@ Only your own character's data, and only while **Sync to Nib Tracker** is on. Ea
 Every batch also says who you are: your name, which game mode you're on (normal, a league, Deadman), and a one-way id
 made from your account hash, so name changes and league profiles are kept apart.
 
-It goes to Nib Tracker's server (Supabase), and screenshots to Nib Tracker's site (buntracker.pages.dev), linked to your
+It goes to Nib Tracker's site (nibtracker.com), screenshots included, linked to your
 Nib Tracker account by the plugin key. Revoke the key on the Account page at any time.
 
 ## What it receives

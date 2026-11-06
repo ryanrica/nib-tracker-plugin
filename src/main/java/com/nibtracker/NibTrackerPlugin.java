@@ -838,6 +838,12 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 				chat(problem(r));
 				return;
 			}
+			if ("bad_request".equals(err))
+			{
+				// The server will never take this batch, so drop it rather than block the queue behind it.
+				log.debug("Nib Tracker dropped {} events the server refused", batch.size());
+				return;
+			}
 			// Network trouble, rate limit or a server error: put the batch back and wait longer each time.
 			for (int i = batch.size() - 1; i >= 0; i--)
 			{
