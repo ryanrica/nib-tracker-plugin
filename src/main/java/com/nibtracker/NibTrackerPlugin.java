@@ -26,6 +26,7 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.Skill;
 import net.runelite.api.WorldType;
 import net.runelite.api.events.ActorDeath;
@@ -465,7 +466,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			return;
 		}
 		JsonObject d = new JsonObject();
-		d.addProperty("regionId", me.getWorldLocation().getRegionID());
+		d.addProperty("regionId", WorldPoint.fromLocalInstance(client, me.getLocalLocation()).getRegionID()); // an instance's map region
 		add("death", d);
 	}
 

@@ -11,6 +11,7 @@ import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.Player;
 import net.runelite.api.Skill;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.HitsplatApplied;
 import net.runelite.api.events.ItemContainerChanged;
@@ -53,7 +54,9 @@ class TripTracker
 		long now = System.currentTimeMillis();
 		if ("kc".equals(type))
 		{
-			trip.kill(d.get("boss").getAsString(), d.get("count").getAsInt(), now, me.getWorldLocation().getRegionID());
+			// In an instance, the region of the map it was copied from, not the instance's own (which changes every time).
+			trip.kill(d.get("boss").getAsString(), d.get("count").getAsInt(), now,
+				WorldPoint.fromLocalInstance(client, me.getLocalLocation()).getRegionID());
 		}
 		else if ("boss_time".equals(type))
 		{
