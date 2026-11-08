@@ -26,6 +26,7 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.Skill;
 import net.runelite.api.WorldType;
 import net.runelite.api.events.ActorDeath;
@@ -102,6 +103,9 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 
 	@Inject
 	private SlayerTracker slayer;
+
+	@Inject
+	private TripTracker trips;
 
 	@Inject
 	private ContainerTracker containers;
@@ -185,6 +189,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		progress.start(this);
 		slayer.start(this);
+		trips.start(this);
 		containers.start(this);
 		grandExchange.start(this);
 		farming.start(this);
@@ -227,12 +232,13 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			resetLink();
 			screenshots.reset();
 			goals.reset();
+			trips.reset();
 		});
 	}
 
 	private Object[] trackers()
 	{
-		return new Object[]{progress, slayer, containers, grandExchange, collectionLog, goals};
+		return new Object[]{progress, slayer, trips, containers, grandExchange, collectionLog, goals};
 	}
 
 	/** The Goals panel's toolbar icon: the Nib Tracker logo (64 px in the jar, shown at 18 px). */
@@ -259,6 +265,10 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		else if (s == GameState.LOGIN_SCREEN || s == GameState.HOPPING)
 		{
+			if (s == GameState.LOGIN_SCREEN)
+			{
+				trips.logout(); // before the session ends, while the trip can still be sent
+			}
 			// Hopping can move between a normal and a league or Deadman world, so the profile is worked out again after.
 			endSession();
 			send(true);
@@ -289,6 +299,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		progress.tick();
 		slayer.tick();
+		trips.tick();
 		containers.tick();
 		farming.tick();
 	}
@@ -336,6 +347,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			return;
 		}
 		goals.onParsed(p.type, p.data);
+		trips.onParsed(p.type, p.data);
 		if (!allowed(sourceOf(p.type), localToggle(p.type)))
 		{
 			return;
@@ -454,7 +466,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			return;
 		}
 		JsonObject d = new JsonObject();
-		d.addProperty("regionId", me.getWorldLocation().getRegionID());
+		d.addProperty("regionId", WorldPoint.fromLocalInstance(client, me.getLocalLocation()).getRegionID()); // an instance's map region
 		add("death", d);
 	}
 

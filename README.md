@@ -90,7 +90,9 @@ Only your own character's data, and only while **Sync to Nib Tracker** is on. Ea
 **What to send**:
 
 - **Loot** you receive (source, items, quantities, GE prices)
-- **Kill counts**, boss times, clue completions, from game chat
+- **Kill counts**, boss times, clue completions, from game chat, and each boss trip once it's over: its kills, the items
+  that went down and up in your inventory and gear, damage taken, and your HP and prayer at the end (sent after the trip; nothing is shown
+  during a fight)
 - **Collection log**: new slots and pets from chat, and each collection log page you open
 - **Levels and XP**: level ups and your skill levels and XP
 - **XP gains**: XP gained per skill, about once a minute while you train

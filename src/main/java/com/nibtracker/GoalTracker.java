@@ -183,6 +183,8 @@ class GoalTracker
 	private boolean namesDirty = true;
 	/* Whether each goal was done when last worked out this session: a completion is a change from false to true. */
 	private final Map<String, Boolean> wasDone = new HashMap<>();
+	/* Goals already announced while RuneLite has been open, kept through logouts and hops: goals the server still had as
+	   unfinished at the next login would otherwise pop up again. */
 	private final Set<String> announced = new HashSet<>();
 	/* Goals finished while RuneLite has been open (kept through logouts and hops). Only these show as Completed: goals
 	   finished in an earlier session stay out of the panel, so the list never builds up. */
@@ -195,6 +197,7 @@ class GoalTracker
 	void start(EventSink sink, GoalsPanel panel)
 	{
 		finishedThisSession.clear();
+		announced.clear();
 		this.sink = sink;
 		this.panel = panel;
 		panel.onPin(this::togglePin);
@@ -304,7 +307,6 @@ class GoalTracker
 		containers.clear();
 		namesDirty = true;
 		wasDone.clear();
-		announced.clear();
 		signalSent.clear();
 		dailyWasDue.clear();
 		misc = null;

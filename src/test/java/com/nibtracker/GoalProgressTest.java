@@ -252,6 +252,18 @@ public class GoalProgressTest
 	}
 
 	@Test
+	public void loggingBackInDoesNotAnnounceItAgain()
+	{
+		Map<String, Boolean> wasDone = new HashMap<>();
+		Set<String> announced = new HashSet<>();
+		assertFalse(GoalProgress.justCompleted(wasDone, announced, "a", false));
+		assertTrue(GoalProgress.justCompleted(wasDone, announced, "a", true));
+		wasDone.clear(); // logged out: GoalTracker.reset() keeps announced
+		assertFalse(GoalProgress.justCompleted(wasDone, announced, "a", false)); // the server's copy is a kill behind
+		assertFalse(GoalProgress.justCompleted(wasDone, announced, "a", true));
+	}
+
+	@Test
 	public void serverDoneStaysDone()
 	{
 		GoalProgress.Goal g = goal("{\"id\":\"a\",\"type\":\"skill_level\",\"done\":true,\"params\":{\"skill\":\"Attack\",\"level\":99}}");
