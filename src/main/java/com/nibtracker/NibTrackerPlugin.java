@@ -104,6 +104,9 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	private SlayerTracker slayer;
 
 	@Inject
+	private TripTracker trips;
+
+	@Inject
 	private ContainerTracker containers;
 
 	@Inject
@@ -185,6 +188,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		progress.start(this);
 		slayer.start(this);
+		trips.start(this);
 		containers.start(this);
 		grandExchange.start(this);
 		farming.start(this);
@@ -227,12 +231,13 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			resetLink();
 			screenshots.reset();
 			goals.reset();
+			trips.reset();
 		});
 	}
 
 	private Object[] trackers()
 	{
-		return new Object[]{progress, slayer, containers, grandExchange, collectionLog, goals};
+		return new Object[]{progress, slayer, trips, containers, grandExchange, collectionLog, goals};
 	}
 
 	/** The Goals panel's toolbar icon: the Nib Tracker logo (64 px in the jar, shown at 18 px). */
@@ -259,6 +264,10 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		else if (s == GameState.LOGIN_SCREEN || s == GameState.HOPPING)
 		{
+			if (s == GameState.LOGIN_SCREEN)
+			{
+				trips.logout(); // before the session ends, while the trip can still be sent
+			}
 			// Hopping can move between a normal and a league or Deadman world, so the profile is worked out again after.
 			endSession();
 			send(true);
@@ -289,6 +298,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		progress.tick();
 		slayer.tick();
+		trips.tick();
 		containers.tick();
 		farming.tick();
 	}
@@ -336,6 +346,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			return;
 		}
 		goals.onParsed(p.type, p.data);
+		trips.onParsed(p.type, p.data);
 		if (!allowed(sourceOf(p.type), localToggle(p.type)))
 		{
 			return;
