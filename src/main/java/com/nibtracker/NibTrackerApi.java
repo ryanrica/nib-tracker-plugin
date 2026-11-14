@@ -47,10 +47,15 @@ class NibTrackerApi
 		this.gson = gson;
 	}
 
-	void hello(String key, JsonObject who, Consumer<JsonObject> done)
+	/** {@code settingsHash}: the last settings' hash, so the server can leave settings out when they haven't changed; or null. */
+	void hello(String key, JsonObject who, String settingsHash, Consumer<JsonObject> done)
 	{
 		JsonObject body = new JsonObject();
 		body.add("who", who);
+		if (settingsHash != null)
+		{
+			body.addProperty("settingsHash", settingsHash);
+		}
 		post("hello", key, body, done);
 	}
 

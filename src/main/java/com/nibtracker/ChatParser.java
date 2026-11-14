@@ -1,6 +1,11 @@
 package com.nibtracker;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -154,7 +159,12 @@ final class ChatParser
 		if (m.matches())
 		{
 			JsonObject d = new JsonObject();
-			d.addProperty("label", m.group(1));
+			String label = m.group(1);
+			d.addProperty("label", label);
+			if (label.regionMatches(true, 0, "Delve level: ", 0, 13))
+			{
+				d.addProperty("delve", label.substring(13, label.length() - " duration".length())); // "3", "8+"
+			}
 			d.addProperty("seconds", seconds(m.group(2)));
 			d.addProperty("newPb", m.group(3) != null);
 			if (m.group(4) != null)
@@ -164,6 +174,107 @@ final class ChatParser
 			return new Parsed("boss_time", d);
 		}
 
+		return null;
+	}
+
+	/**
+	 * A pattern from the server's settings ("messages"): {type, pattern, groups}, matched like the built-in ones, only
+	 * against game messages and only when none of them matches, so new game lines need no release. Plain data, never run.
+	 */
+	static final class Extra
+	{
+		final String type;
+		final Pattern pattern;
+		final String[] groups;
+
+		Extra(String type, Pattern pattern, String[] groups)
+		{
+			this.type = type;
+			this.pattern = pattern;
+			this.groups = groups;
+		}
+	}
+
+	static final int MAX_EXTRAS = 50;
+	static final int MAX_EXTRA_LENGTH = 300;
+	private static final Pattern EXTRA_TYPE = Pattern.compile("^[a-z_]{1,40}$");
+	private static final Pattern NUMBER = Pattern.compile("^[0-9][0-9,]{0,14}$");
+
+	/** The server's "messages" setting, compiled. An entry that's malformed or doesn't compile is left out. */
+	static List<Extra> extras(JsonElement setting)
+	{
+		List<Extra> out = new ArrayList<>();
+		if (setting == null || !setting.isJsonArray())
+		{
+			return out;
+		}
+		for (JsonElement e : setting.getAsJsonArray())
+		{
+			if (out.size() == MAX_EXTRAS)
+			{
+				break;
+			}
+			try
+			{
+				JsonObject o = e.getAsJsonObject();
+				String type = o.get("type").getAsString();
+				String regex = o.get("pattern").getAsString();
+				JsonArray g = o.getAsJsonArray("groups");
+				String[] groups = new String[g == null ? 0 : g.size()];
+				for (int i = 0; i < groups.length; i++)
+				{
+					groups[i] = g.get(i).getAsString();
+				}
+				// A kill count without its boss and count would break the goals and trips that read it.
+				boolean kcOk = !"kc".equals(type) || Arrays.asList(groups).containsAll(Arrays.asList("boss", "count"));
+				if (EXTRA_TYPE.matcher(type).matches() && regex.length() <= MAX_EXTRA_LENGTH && kcOk)
+				{
+					out.add(new Extra(type, Pattern.compile(regex), groups));
+				}
+			}
+			catch (RuntimeException ex)
+			{
+				// Not an object, a missing field, or a pattern that doesn't compile: skipped.
+			}
+		}
+		return out;
+	}
+
+	/** The built-in patterns first, then the server's. */
+	static Parsed parse(String msg, List<Extra> extras)
+	{
+		Parsed p = parse(msg);
+		if (p != null || msg == null)
+		{
+			return p;
+		}
+		for (Extra x : extras)
+		{
+			Matcher m = x.pattern.matcher(msg);
+			if (!m.matches())
+			{
+				continue;
+			}
+			JsonObject d = new JsonObject();
+			for (int i = 0; i < x.groups.length && i < m.groupCount(); i++)
+			{
+				String v = m.group(i + 1);
+				if (v == null)
+				{
+					continue;
+				}
+				// Digits (with commas) become a number, as the built-in counts do.
+				if (NUMBER.matcher(v).matches())
+				{
+					d.addProperty(x.groups[i], Long.parseLong(v.replace(",", "")));
+				}
+				else
+				{
+					d.addProperty(x.groups[i], v);
+				}
+			}
+			return new Parsed(x.type, d);
+		}
 		return null;
 	}
 
