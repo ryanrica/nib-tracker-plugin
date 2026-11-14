@@ -57,13 +57,15 @@ public class BossTripTest
 	{
 		BossTrip t = new BossTrip(0, items());
 		t.kill("Vorkath", 1, 1_000, 9023, 0);
-		t.time(101.4, 1_000); // after the kill count line
-		t.time(99.0, 2_000); // a stray second time doesn't overwrite it
-		t.time(95.0, 50_000); // before the next kill count line
+		t.time(101.4, null, 1_000); // after the kill count line
+		t.time(99.0, null, 2_000); // a stray second time doesn't overwrite it
+		t.time(95.0, "3", 50_000); // before the next kill count line, naming a delve level
 		t.kill("Vorkath", 2, 50_000, 9023, 0);
 		t.kill("Vorkath", 3, 120_000, 9023, 0); // no time said for this one
 		JsonArray kills = t.end("banked", 130_000, 50, 10).getAsJsonArray("kills");
 		assertEquals(3, kills.size());
+		assertFalse(kills.get(0).getAsJsonObject().has("delve"));
+		assertEquals("3", kills.get(1).getAsJsonObject().get("delve").getAsString());
 		assertEquals(101.4, kills.get(0).getAsJsonObject().get("seconds").getAsDouble(), 0);
 		assertEquals(95.0, kills.get(1).getAsJsonObject().get("seconds").getAsDouble(), 0);
 		assertFalse(kills.get(2).getAsJsonObject().has("seconds"));

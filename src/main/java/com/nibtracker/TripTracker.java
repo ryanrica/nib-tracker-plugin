@@ -70,7 +70,7 @@ class TripTracker
 		}
 		else if ("boss_time".equals(type))
 		{
-			trip.time(d.get("seconds").getAsDouble(), now);
+			trip.time(d.get("seconds").getAsDouble(), d.has("delve") ? d.get("delve").getAsString() : null, now);
 		}
 	}
 

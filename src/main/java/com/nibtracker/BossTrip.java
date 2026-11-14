@@ -32,6 +32,7 @@ final class BossTrip
 	private JsonObject lastKill;
 	private long lastKillAt;
 	private double heldSeconds = -1;
+	private String heldDelve;
 	private long heldAt;
 	private int damage;
 	private int region = -1;
@@ -83,6 +84,10 @@ final class BossTrip
 		if (heldSeconds >= 0 && at - heldAt <= PAIR_MS)
 		{
 			k.addProperty("seconds", heldSeconds);
+			if (heldDelve != null)
+			{
+				k.addProperty("delve", heldDelve);
+			}
 		}
 		heldSeconds = -1;
 		kills.add(k);
@@ -156,15 +161,23 @@ final class BossTrip
 		return n.startsWith("the ") ? n.substring(4) : n;
 	}
 
-	/** A "Fight duration" (or similar) line: goes with the kill it came with, whichever line came first. */
-	void time(double seconds, long at)
+	/**
+	 * A "Fight duration" (or similar) line: goes with the kill it came with, whichever line came first. {@code delve}: the
+	 * Doom of Mokhaiotl delve level the line names ("3", "8+"), or null.
+	 */
+	void time(double seconds, String delve, long at)
 	{
 		if (lastKill != null && !lastKill.has("seconds") && at - lastKillAt <= PAIR_MS)
 		{
 			lastKill.addProperty("seconds", seconds);
+			if (delve != null)
+			{
+				lastKill.addProperty("delve", delve);
+			}
 			return;
 		}
 		heldSeconds = seconds;
+		heldDelve = delve;
 		heldAt = at;
 	}
 
