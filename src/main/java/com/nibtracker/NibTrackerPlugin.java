@@ -327,6 +327,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			linked = false;
 			helloSent = false;
 			nextHelloAt = 0;
+			clientThread.invoke(containers::resend);
 		}
 		// Any of the plugin's settings can change what the Goals panel or the game screen shows.
 		goals.refresh();
@@ -517,6 +518,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		grandExchange.login();
 		farming.login();
 		goals.login();
+		containers.resend();
 	}
 
 	/** Client thread. Sends what's left of the XP bucket and the session length, then forgets who was playing. */
@@ -528,6 +530,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		flushXp();
 		farming.send();
+		containers.flush();
 		if (xpChanged)
 		{
 			snapshotCharacter();

@@ -104,8 +104,7 @@ class ContainerTracker
 		{
 			return;
 		}
-		pending.put(e.getContainerId(), items(e.getContainerId(), e.getItemContainer()));
-		schedule(e.getContainerId());
+		queue(e.getContainerId(), items(e.getContainerId(), e.getItemContainer()));
 		if (e.getContainerId() == InventoryID.BANK)
 		{
 			schedule(POTION_STORAGE);
@@ -121,6 +120,29 @@ class ContainerTracker
 		{
 			schedule(POTION_STORAGE);
 		}
+	}
+
+	/** Logging in, or sync switched on: worn equipment and the inventory go again, as changes made before weren't sent. */
+	void resend()
+	{
+		if (sink == null || !sink.active() || !sink.allowed("gear", config.sendBank()))
+		{
+			return;
+		}
+		for (int id : new int[]{InventoryID.WORN, InventoryID.INV})
+		{
+			ItemContainer c = client.getItemContainer(id);
+			if (c != null)
+			{
+				queue(id, items(id, c));
+			}
+		}
+	}
+
+	void queue(int id, JsonArray items)
+	{
+		pending.put(id, items);
+		schedule(id);
 	}
 
 	private void schedule(int id)
@@ -142,28 +164,43 @@ class ContainerTracker
 	void tick()
 	{
 		ticks++;
+		sendDue(false);
+	}
+
+	/** Logging out, hopping or stopping: sends what's still waiting now, while the character is known, instead of dropping it. */
+	void flush()
+	{
+		sendDue(true);
+	}
+
+	private void sendDue(boolean all)
+	{
 		if (dueAt.isEmpty())
 		{
 			return;
 		}
 		dueAt.entrySet().removeIf(due -> {
-			if (ticks < due.getValue())
+			if (!all && ticks < due.getValue())
 			{
 				return false;
 			}
 			int id = due.getKey();
-			JsonArray items = id == POTION_STORAGE ? potions() : pending.remove(id);
+			// Potion storage is read from the client when due, which can't be trusted once logging out has begun.
+			JsonArray items = id == POTION_STORAGE ? (all ? null : potions()) : pending.remove(id);
 			Watch w = watch(id);
 			if (w != null && items != null && !items.equals(lastSent.get(id)) && sink.active())
 			{
-				lastSent.put(id, items);
 				JsonObject d = new JsonObject();
 				if (w == SERVER_WATCH)
 				{
 					d.addProperty("container", id);
 				}
 				d.add("items", items);
-				sink.emit(w.type, d);
+				// Not sent while sync is off or there's no key: kept unsent, so the same items go once it's on.
+				if (sink.emit(w.type, d) != null)
+				{
+					lastSent.put(id, items);
+				}
 			}
 			return true;
 		});
