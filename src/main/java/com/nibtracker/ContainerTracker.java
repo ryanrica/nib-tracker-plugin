@@ -122,6 +122,23 @@ class ContainerTracker
 		}
 	}
 
+	/** Logging in, or sync switched on: worn equipment and the inventory go again, as changes made before weren't sent. */
+	void resend()
+	{
+		if (sink == null || !sink.active() || !sink.allowed("gear", config.sendBank()))
+		{
+			return;
+		}
+		for (int id : new int[]{InventoryID.WORN, InventoryID.INV})
+		{
+			ItemContainer c = client.getItemContainer(id);
+			if (c != null)
+			{
+				queue(id, items(id, c));
+			}
+		}
+	}
+
 	void queue(int id, JsonArray items)
 	{
 		pending.put(id, items);
@@ -173,14 +190,17 @@ class ContainerTracker
 			Watch w = watch(id);
 			if (w != null && items != null && !items.equals(lastSent.get(id)) && sink.active())
 			{
-				lastSent.put(id, items);
 				JsonObject d = new JsonObject();
 				if (w == SERVER_WATCH)
 				{
 					d.addProperty("container", id);
 				}
 				d.add("items", items);
-				sink.emit(w.type, d);
+				// Not sent while sync is off or there's no key: kept unsent, so the same items go once it's on.
+				if (sink.emit(w.type, d) != null)
+				{
+					lastSent.put(id, items);
+				}
 			}
 			return true;
 		});

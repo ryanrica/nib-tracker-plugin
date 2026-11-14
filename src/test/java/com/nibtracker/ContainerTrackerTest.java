@@ -35,15 +35,18 @@ public class ContainerTrackerTest
 		assertFalse(owned(-1, 1));
 	}
 
-	@Test
-	public void loggingOutSendsTheWaitingInventoryOnce()
+	/** A tracker whose sends land in {@code sent}, or go nowhere (sync off, no key) while {@code on[0]} is false. */
+	private static ContainerTracker tracker(List<String> sent, boolean[] on)
 	{
-		List<String> sent = new ArrayList<>();
 		ContainerTracker t = new ContainerTracker();
 		t.start(new EventSink()
 		{
 			public String emit(String type, JsonObject data)
 			{
+				if (!on[0])
+				{
+					return null;
+				}
 				sent.add(type);
 				return "id";
 			}
@@ -63,6 +66,14 @@ public class ContainerTrackerTest
 				return true;
 			}
 		});
+		return t;
+	}
+
+	@Test
+	public void loggingOutSendsTheWaitingInventoryOnce()
+	{
+		List<String> sent = new ArrayList<>();
+		ContainerTracker t = tracker(sent, new boolean[]{true});
 		JsonArray whip = new JsonArray();
 		whip.add(4151);
 		t.queue(InventoryID.INV, whip);
@@ -75,5 +86,23 @@ public class ContainerTrackerTest
 		t.queue(InventoryID.INV, whip); // the same items again
 		t.flush();
 		assertEquals(1, sent.size());
+	}
+
+	@Test
+	public void gearChangedWhileSyncWasOffGoesOnceItsOn()
+	{
+		List<String> sent = new ArrayList<>();
+		boolean[] on = {false};
+		ContainerTracker t = tracker(sent, on);
+		JsonArray noAxe = new JsonArray();
+		noAxe.add(4151);
+		t.queue(InventoryID.WORN, noAxe); // took the axe off before pasting the key
+		t.flush();
+		assertTrue(sent.isEmpty());
+		on[0] = true;
+		t.queue(InventoryID.WORN, noAxe); // the same gear again, once sync is on (what resend() queues)
+		t.flush();
+		assertEquals(1, sent.size());
+		assertEquals("snapshot_equipment", sent.get(0));
 	}
 }
