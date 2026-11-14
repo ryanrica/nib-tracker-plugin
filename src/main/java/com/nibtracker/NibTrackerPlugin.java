@@ -528,6 +528,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		flushXp();
 		farming.send();
+		containers.flush();
 		if (xpChanged)
 		{
 			snapshotCharacter();

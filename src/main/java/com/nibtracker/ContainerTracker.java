@@ -104,8 +104,7 @@ class ContainerTracker
 		{
 			return;
 		}
-		pending.put(e.getContainerId(), items(e.getContainerId(), e.getItemContainer()));
-		schedule(e.getContainerId());
+		queue(e.getContainerId(), items(e.getContainerId(), e.getItemContainer()));
 		if (e.getContainerId() == InventoryID.BANK)
 		{
 			schedule(POTION_STORAGE);
@@ -121,6 +120,12 @@ class ContainerTracker
 		{
 			schedule(POTION_STORAGE);
 		}
+	}
+
+	void queue(int id, JsonArray items)
+	{
+		pending.put(id, items);
+		schedule(id);
 	}
 
 	private void schedule(int id)
@@ -142,17 +147,29 @@ class ContainerTracker
 	void tick()
 	{
 		ticks++;
+		sendDue(false);
+	}
+
+	/** Logging out, hopping or stopping: sends what's still waiting now, while the character is known, instead of dropping it. */
+	void flush()
+	{
+		sendDue(true);
+	}
+
+	private void sendDue(boolean all)
+	{
 		if (dueAt.isEmpty())
 		{
 			return;
 		}
 		dueAt.entrySet().removeIf(due -> {
-			if (ticks < due.getValue())
+			if (!all && ticks < due.getValue())
 			{
 				return false;
 			}
 			int id = due.getKey();
-			JsonArray items = id == POTION_STORAGE ? potions() : pending.remove(id);
+			// Potion storage is read from the client when due, which can't be trusted once logging out has begun.
+			JsonArray items = id == POTION_STORAGE ? (all ? null : potions()) : pending.remove(id);
 			Watch w = watch(id);
 			if (w != null && items != null && !items.equals(lastSent.get(id)) && sink.active())
 			{
