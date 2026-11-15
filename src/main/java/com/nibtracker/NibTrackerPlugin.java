@@ -178,6 +178,10 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	private volatile long lastSentAt;
 	/* When settings last came from the server; if nothing has been sent for a while they're asked for again. */
 	private volatile long settingsAt;
+	/* The server's hash of the settings it last sent: on a refresh it leaves them out if they haven't changed. */
+	private volatile String settingsHash;
+	/* The server's extra game-message patterns ("messages" in settings), compiled when settings arrive. */
+	private volatile List<ChatParser.Extra> messagePatterns = new ArrayList<>();
 	private volatile boolean refreshing;
 
 	@Override
@@ -342,7 +346,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			return;
 		}
 		String msg = Text.removeTags(e.getMessage());
-		ChatParser.Parsed p = ChatParser.parse(msg);
+		ChatParser.Parsed p = ChatParser.parse(msg, messagePatterns);
 		if (p == null)
 		{
 			return;
@@ -582,7 +586,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			return;
 		}
 		helloSent = true;
-		api.hello(key, w, r -> {
+		api.hello(key, w, null, r -> {
 			if (r == null)
 			{
 				helloSent = false;
@@ -596,7 +600,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			}
 			if (r.has("settings") && r.get("settings").isJsonObject())
 			{
-				updateSettings(r.getAsJsonObject("settings"), r.get("plannerAccount"));
+				updateSettings(r.getAsJsonObject("settings"), r.get("plannerAccount"), r.get("settingsHash"));
 			}
 			linked = true;
 			JsonElement msg = settings.get("message");
@@ -615,6 +619,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	private void resetLink()
 	{
 		linked = false;
+		settingsHash = null;
 		helloSent = false;
 		inFlight.set(false);
 		backoffMs = 0;
@@ -747,10 +752,12 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	}
 
 	/** Any thread. New settings from the server; the watch list is re-read on the client thread if it changed. */
-	private void updateSettings(JsonObject s, JsonElement plannerAccount)
+	private void updateSettings(JsonObject s, JsonElement plannerAccount, JsonElement hash)
 	{
 		JsonElement oldWatch = settings.get("watch");
 		settings = s;
+		settingsHash = hash != null && hash.isJsonPrimitive() ? hash.getAsString() : null;
+		messagePatterns = ChatParser.extras(s.get("messages"));
 		settingsAt = System.currentTimeMillis();
 		if (oldWatch == null || !oldWatch.equals(s.get("watch")))
 		{
@@ -769,11 +776,11 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		}
 		refreshing = true;
 		settingsAt = System.currentTimeMillis();
-		api.hello(config.pluginKey().trim(), w, r -> {
+		api.hello(config.pluginKey().trim(), w, settingsHash, r -> {
 			refreshing = false;
 			if (r != null && r.has("ok") && r.get("ok").getAsBoolean() && r.has("settings") && r.get("settings").isJsonObject() && w == who)
 			{
-				updateSettings(r.getAsJsonObject("settings"), r.get("plannerAccount"));
+				updateSettings(r.getAsJsonObject("settings"), r.get("plannerAccount"), r.get("settingsHash"));
 			}
 		});
 	}
@@ -843,7 +850,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 				screenshots.eventsDelivered(ids);
 				if (r.has("settings") && r.get("settings").isJsonObject())
 				{
-					updateSettings(r.getAsJsonObject("settings"), r.get("plannerAccount"));
+					updateSettings(r.getAsJsonObject("settings"), r.get("plannerAccount"), r.get("settingsHash"));
 				}
 				return;
 			}

@@ -5,10 +5,14 @@ import java.util.HashMap;
 import java.util.Map;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.EquipmentInventorySlot;
+import net.runelite.api.Hitsplat;
 import net.runelite.api.HitsplatID;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
+import net.runelite.api.NPC;
 import net.runelite.api.Player;
 import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
@@ -17,12 +21,15 @@ import net.runelite.api.events.HitsplatApplied;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.ItemStats;
 
 /**
  * Sends one "boss_trip" event per trip with at least one kill count message (see {@link BossTrip}), under the Kill
  * counts switch. Totals only, sent after the trip: nothing is shown or worked out for the player during a fight.
  * Client thread only.
  */
+@Slf4j
 @Singleton
 class TripTracker
 {
@@ -31,6 +38,9 @@ class TripTracker
 
 	@Inject
 	private NibTrackerConfig config;
+
+	@Inject
+	private ItemManager itemManager;
 
 	private EventSink sink;
 	private BossTrip trip;
@@ -56,11 +66,11 @@ class TripTracker
 		{
 			// In an instance, the region of the map it was copied from, not the instance's own (which changes every time).
 			trip.kill(d.get("boss").getAsString(), d.get("count").getAsInt(), now,
-				WorldPoint.fromLocalInstance(client, me.getLocalLocation()).getRegionID());
+				WorldPoint.fromLocalInstance(client, me.getLocalLocation()).getRegionID(), client.getTickCount());
 		}
 		else if ("boss_time".equals(type))
 		{
-			trip.time(d.get("seconds").getAsDouble(), now);
+			trip.time(d.get("seconds").getAsDouble(), d.has("delve") ? d.get("delve").getAsString() : null, now);
 		}
 	}
 
@@ -81,9 +91,29 @@ class TripTracker
 	@Subscribe
 	public void onHitsplatApplied(HitsplatApplied e)
 	{
-		if (trip != null && e.getActor() == client.getLocalPlayer() && takesHitpoints(e.getHitsplat().getHitsplatType()))
+		if (trip == null)
 		{
-			trip.damage(e.getHitsplat().getAmount());
+			return;
+		}
+		Hitsplat h = e.getHitsplat();
+		if (e.getActor() == client.getLocalPlayer())
+		{
+			if (takesHitpoints(h.getHitsplatType()))
+			{
+				trip.damage(h.getAmount());
+			}
+		}
+		else if (e.getActor() instanceof NPC)
+		{
+			// On an NPC, "mine" is the player's own hit or miss; heals are counted whoever caused them.
+			if (h.isMine())
+			{
+				trip.hit(e.getActor().getName(), client.getTickCount(), h.getAmount(), attackSpeed());
+			}
+			else if (h.getHitsplatType() == HitsplatID.HEAL)
+			{
+				trip.healed(e.getActor().getName(), h.getAmount());
+			}
 		}
 	}
 
@@ -94,6 +124,10 @@ class TripTracker
 		{
 			end("died", 0);
 			awaitingRespawn = true;
+		}
+		else if (trip != null && e.getActor() instanceof NPC)
+		{
+			trip.died(e.getActor().getName(), client.getTickCount());
 		}
 	}
 
@@ -120,6 +154,7 @@ class TripTracker
 			fresh(now);
 			return;
 		}
+		trip.tick(client.getTickCount());
 		if (bankTouched)
 		{
 			// Every bank change (opening it, withdrawing, depositing) starts the next trip from what you have now.
@@ -179,7 +214,9 @@ class TripTracker
 		{
 			t.items(items());
 		}
-		sink.emit("boss_trip", t.end(reason, System.currentTimeMillis(), hp, client.getBoostedSkillLevel(Skill.PRAYER)));
+		JsonObject d = t.end(reason, System.currentTimeMillis(), hp, client.getBoostedSkillLevel(Skill.PRAYER));
+		log.debug("Nib Tracker boss trip kills: {}", d.get("kills"));
+		sink.emit("boss_trip", d);
 	}
 
 	/** The inventory and worn equipment together, so putting something on or taking it off changes nothing. */
@@ -201,6 +238,15 @@ class TripTracker
 			}
 		}
 		return m;
+	}
+
+	/** The worn weapon's attack speed in ticks; 4 unarmed. */
+	private int attackSpeed()
+	{
+		ItemContainer worn = client.getItemContainer(InventoryID.WORN);
+		Item weapon = worn == null ? null : worn.getItem(EquipmentInventorySlot.WEAPON.getSlotIdx());
+		ItemStats stats = weapon == null ? null : itemManager.getItemStats(weapon.getId());
+		return stats == null || stats.getEquipment() == null ? 4 : stats.getEquipment().getAspeed();
 	}
 
 	/** Hitsplats that take the player's hitpoints: hits on them, and poison, venom, disease, bleed and burn. */

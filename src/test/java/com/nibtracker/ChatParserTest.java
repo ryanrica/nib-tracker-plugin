@@ -4,10 +4,36 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import java.util.List;
 import org.junit.Test;
 
 public class ChatParserTest
 {
+	@Test
+	public void serverPatternsReadWhatTheBuiltInOnesDont()
+	{
+		List<ChatParser.Extra> extras = ChatParser.extras(new Gson().fromJson("["
+			+ "{\"type\":\"kc\",\"pattern\":\"^You have helped defeat the (.+) ([0-9,]+) times\\\\.$\",\"groups\":[\"boss\",\"count\"]},"
+			+ "{\"type\":\"kc\",\"pattern\":\"^(.+) down$\",\"groups\":[\"boss\"]}," // a kill count needs its count
+			+ "{\"type\":\"Bad Type\",\"pattern\":\"^x$\",\"groups\":[]},"
+			+ "{\"type\":\"minigame\",\"pattern\":\"^([\",\"groups\":[]}," // doesn't compile
+			+ "\"not an object\","
+			+ "{\"type\":\"minigame\",\"pattern\":\"^Your reward points are now (.+)\\\\.$\",\"groups\":[\"points\"]}"
+			+ "]", JsonArray.class));
+		assertEquals(2, extras.size());
+
+		ChatParser.Parsed p = ChatParser.parse("You have helped defeat the Royal Titans 1,204 times.", extras);
+		assertEquals("kc", p.type);
+		assertEquals("Royal Titans", p.data.get("boss").getAsString());
+		assertEquals(1204, p.data.get("count").getAsInt());
+		assertEquals("lots", ChatParser.parse("Your reward points are now lots.", extras).data.get("points").getAsString());
+		assertEquals("Zulrah", ChatParser.parse("Your Zulrah kill count is: 3.", extras).data.get("boss").getAsString()); // built-in first
+		assertNull(ChatParser.parse("Welcome to Old School RuneScape.", extras));
+		assertTrue(ChatParser.extras(null).isEmpty()); // nothing from the server: built-in patterns only
+	}
+
 	@Test
 	public void killCounts()
 	{
@@ -62,6 +88,12 @@ public class ChatParserTest
 		assertEquals("Challenge", p.data.get("label").getAsString());
 		assertEquals(1501.0, p.data.get("seconds").getAsDouble(), 0.001);
 		assertTrue(p.data.get("newPb").getAsBoolean());
+		assertFalse(p.data.has("delve"));
+
+		p = ChatParser.parse("Delve level: 8+ duration: 1:23.40");
+		assertEquals("boss_time", p.type);
+		assertEquals("8+", p.data.get("delve").getAsString());
+		assertEquals(83.4, p.data.get("seconds").getAsDouble(), 0.001);
 
 		assertEquals(3723.0, ChatParser.seconds("1:02:03"), 0.001);
 	}

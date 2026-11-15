@@ -28,7 +28,7 @@ import okhttp3.ResponseBody;
 class NibTrackerApi
 {
 	/* Must match runelite-plugin.properties (NibTrackerApiTest checks), so the server can tell releases apart. */
-	static final String VERSION = "0.8.0";
+	static final String VERSION = "0.8.1";
 
 	/* The Nib Tracker web app. Goal links in the panel open it, and the plugin API lives on it; the server checks the
 	   plugin key on every call. */
@@ -47,10 +47,15 @@ class NibTrackerApi
 		this.gson = gson;
 	}
 
-	void hello(String key, JsonObject who, Consumer<JsonObject> done)
+	/** {@code settingsHash}: the last settings' hash, so the server can leave settings out when they haven't changed; or null. */
+	void hello(String key, JsonObject who, String settingsHash, Consumer<JsonObject> done)
 	{
 		JsonObject body = new JsonObject();
 		body.add("who", who);
+		if (settingsHash != null)
+		{
+			body.addProperty("settingsHash", settingsHash);
+		}
 		post("hello", key, body, done);
 	}
 
