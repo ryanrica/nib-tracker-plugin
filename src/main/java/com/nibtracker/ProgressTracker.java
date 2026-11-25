@@ -312,7 +312,7 @@ class ProgressTracker
 
 	private void sendVars()
 	{
-		if (!sink.allowed("vars", true))
+		if (!sink.allowed("vars", config.sendTasks()))
 		{
 			changedVarps.clear();
 			changedVarbits.clear();

@@ -2826,7 +2826,7 @@ class GoalsPanel extends PluginPanel
 
 	private static String escape(String s)
 	{
-		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
 	}
 
 	/** A bundled font, loaded from the plugin's jar; the RuneScape small font stands in should it fail to load. */

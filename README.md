@@ -91,12 +91,14 @@ Only your own character's data, and only while **Sync to Nib Tracker** is on. Ea
 
 - **Loot** you receive (source, items, quantities, GE prices)
 - **Kill counts**, boss times, clue completions, from game chat, and each boss trip once it's over: its kills, the items
-  that went down and up in your inventory and gear, damage taken, and your HP and prayer at the end (sent after the trip; nothing is shown
-  during a fight)
+  that went down and up in your inventory and gear, damage taken, and your HP and prayer at the end; and for each kill,
+  from your own hits on the boss, how long the fight lasted, the ticks you weren't attacking, the damage you dealt and what
+  the boss healed (all sent after the trip; nothing is shown during a fight)
 - **Collection log**: new slots and pets from chat, and each collection log page you open
 - **Levels and XP**: level ups and your skill levels and XP
 - **XP gains**: XP gained per skill, about once a minute while you train
-- **Quests, diaries and tasks**: quest, achievement diary and combat achievement progress, and league tasks, points and relics
+- **Quests, diaries and tasks**: quest, achievement diary and combat achievement progress, league tasks, points and relics,
+  and the other game values (varbits and varps) of your own that Nib Tracker lists, such as unlocks
 - **Play sessions and deaths**: when you log in and out, and the area you die in
 - **Slayer**: your task, its progress, points and streak
 - **Bank and gear**: bank (with its tabs), seed vault, potion storage, worn equipment, inventory, and other storage of
@@ -117,7 +119,8 @@ Nib Tracker account by the plugin key. Revoke the key on the Account page at any
 
 Plain data only: what the Goals panel shows (your goals, daily tasks, farm run order and bingo boards), which of the
 sources above the server wants, a short notice when there's one (picked from a fixed list in the plugin), and a list of
-your own game values and storage to report as they change. The plugin never downloads or runs code. Clicking a goal opens a page in your web browser (Nib Tracker or the OSRS Wiki); nothing opens on its own.
+your own game values and storage to report as they change (under the switches above). Game messages are only read with
+the patterns built into the plugin. The plugin never downloads or runs code. Clicking a goal opens a page in your web browser (Nib Tracker or the OSRS Wiki); nothing opens on its own.
 
 This plugin submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers.
 
@@ -134,8 +137,8 @@ To log in to the development client with a Jagex account, follow
 [Using Jagex Accounts](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
 
 The plugin talks to Nib Tracker's plugin API (v1) on nibtracker.com; the web app's source isn't public. The rule that
-matters most: the plugin only reports facts, and the server decides what they mean, so most new features never need a
-plugin update (and a new Plugin Hub review).
+matters most: the plugin only reports facts, and the server decides what they mean. What it reads, and the game messages
+it reads them from, are fixed in the plugin: changing them takes a plugin update.
 
 ## Help
 
