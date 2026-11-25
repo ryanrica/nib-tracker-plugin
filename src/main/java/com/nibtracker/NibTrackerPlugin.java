@@ -60,7 +60,7 @@ import net.runelite.client.util.Text;
 @Slf4j
 @PluginDescriptor(
 	name = "Nib Tracker",
-	description = "Syncs your loot, kill counts, collection log, XP and levels to your Nib Tracker planner",
+	description = "Syncs your loot, kill counts, collection log, XP, slayer, farming and bingo progress to your Nib Tracker planner, and shows your goals in game",
 	tags = {"loot", "collection", "log", "xp", "goals", "planner", "sync", "leagues"}
 )
 public class NibTrackerPlugin extends Plugin implements EventSink
@@ -180,8 +180,6 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 	private volatile long settingsAt;
 	/* The server's hash of the settings it last sent: on a refresh it leaves them out if they haven't changed. */
 	private volatile String settingsHash;
-	/* The server's extra game-message patterns ("messages" in settings), compiled when settings arrive. */
-	private volatile List<ChatParser.Extra> messagePatterns = new ArrayList<>();
 	private volatile boolean refreshing;
 
 	@Override
@@ -346,7 +344,7 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 			return;
 		}
 		String msg = Text.removeTags(e.getMessage());
-		ChatParser.Parsed p = ChatParser.parse(msg, messagePatterns);
+		ChatParser.Parsed p = ChatParser.parse(msg);
 		if (p == null)
 		{
 			return;
@@ -603,11 +601,6 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 				updateSettings(r.getAsJsonObject("settings"), r.get("plannerAccount"), r.get("settingsHash"));
 			}
 			linked = true;
-			JsonElement msg = settings.get("message");
-			if (msg != null && msg.isJsonPrimitive())
-			{
-				chat(msg.getAsString());
-			}
 			JsonElement planner = r.get("plannerAccount");
 			String name = w.get("rsn").getAsString() + profileLabel(w.get("profile").getAsString());
 			chat(planner != null && planner.isJsonPrimitive()
@@ -757,7 +750,6 @@ public class NibTrackerPlugin extends Plugin implements EventSink
 		JsonElement oldWatch = settings.get("watch");
 		settings = s;
 		settingsHash = hash != null && hash.isJsonPrimitive() ? hash.getAsString() : null;
-		messagePatterns = ChatParser.extras(s.get("messages"));
 		settingsAt = System.currentTimeMillis();
 		if (oldWatch == null || !oldWatch.equals(s.get("watch")))
 		{

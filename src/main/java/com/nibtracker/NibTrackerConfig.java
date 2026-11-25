@@ -72,7 +72,7 @@ public interface NibTrackerConfig extends Config
 		return true;
 	}
 
-	@ConfigItem(keyName = "sendTasks", name = "Quests, diaries and tasks", description = "Quests, achievement diaries, combat achievements and league tasks and relics", section = sources, position = 16)
+	@ConfigItem(keyName = "sendTasks", name = "Quests, diaries and tasks", description = "Quests, achievement diaries, combat achievements, league tasks and relics, and the other game values Nib Tracker lists (such as unlocks)", section = sources, position = 16)
 	default boolean sendTasks()
 	{
 		return true;
